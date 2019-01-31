@@ -1,0 +1,102 @@
+#include <iostream>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <string>
+#include <thread>
+#include <pthread.h> 
+
+using namespace std;
+
+int setupServer()
+{
+    int port = 8686;
+	cout << "Server Starting..." << endl;
+    // Create a socket
+    int listening = socket(AF_INET, SOCK_STREAM, 0);
+    if (listening == -1) {
+        cerr << "Can't create a socket! Quitting" << endl;
+        return -1; }
+
+    // Bind the ip address and port to a socket
+    sockaddr_in hint;
+    hint.sin_family = AF_INET;
+    hint.sin_port = htons(port);
+    inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
+    bind(listening, (sockaddr*)&hint, sizeof(hint));
+
+    // Tell Winsock the socket is for listening
+    listen(listening, SOMAXCONN);
+    cout  << "Listening to TCP clients at : " << port << endl;
+
+    // Wait for a connection
+    sockaddr_in client;
+    socklen_t clientSize = sizeof(client);
+    int clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
+
+    char host[NI_MAXHOST];      // Client's remote name
+    char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
+
+    memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
+    memset(service, 0, NI_MAXSERV);
+
+    if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
+        cout << host << " connected on port " << service << endl; }
+    else {
+        inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
+        cout << host << " connected on port " << ntohs(client.sin_port) << endl; }
+
+    // Close listening socket
+    close(listening);
+
+    // While loop: accept and echo message back to client
+    int bufSize = 4096;
+    char buf[bufSize];
+
+    while (true) {
+        memset(buf, 0, bufSize);
+
+        // Wait for client to send data
+        int bytesReceived = recv(clientSocket, buf, bufSize, 0);
+        if (bytesReceived == -1) {
+            cerr << "Error in recv(). Quitting" << endl;
+            break; }
+
+        if (bytesReceived == 0) {
+            cout << "Client disconnected " << endl;
+            break; }
+        cout << string(buf, 0, bytesReceived) << endl;
+
+        // Echo message back to client
+        send(clientSocket, buf, bytesReceived + 1, 0); }
+
+    // Close the socket
+    close(clientSocket);
+}
+
+int func1()
+{
+    cout << "Wkkww 1" << endl;
+    return 0;
+}
+
+void func2()
+{
+    cout << "Wkkww 2" << endl;
+}
+int main(int argc, char *argv[])
+{
+    //std::thread setServer (setupServer);
+    //setupServer();
+    std::thread t1(func1);
+    t1.join();
+    t1.detach();
+	//cout << "Nextttttt";
+
+    //task1("Hello");
+	//std::thread t1(task1, "Hello");
+	return 0;
+}
