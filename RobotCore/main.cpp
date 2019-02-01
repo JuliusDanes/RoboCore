@@ -164,8 +164,6 @@ void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int sh
                 chk[2] = false; // Done
 
             sendPosXYZ();
-            // SendCallBack (_socketDict["BaseStation"], (string.Join (",", posXYZ)), "Goto");
-            // cout << "wkwkw B " << chk[0] << chk[1] << chk[2] << endl;
             usleep (100000); // time per limit (microsecond)
         }
     } catch (exception e) 
@@ -184,7 +182,6 @@ void threadGoto (string keyName, string message)
     }
     for (stringstream ss(message.substr(2)); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
     gotoDict[keyName] = thread( GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
-    // gotoDict[keyName].Start ();
 }
 
 string ResponeCallback(string message)
@@ -192,7 +189,6 @@ string ResponeCallback(string message)
     string respone = "", item;
     vector<string> _dtMessage, msgXYZ;
     for (stringstream ss(message); (getline(ss, item, '|')); (_dtMessage.push_back(item)));
-    // if ((!_dtMessage[0].StartsWith("go")) && (Regex.IsMatch(_dtMessage[0], "[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}")))
     if ((_dtMessage[0].find("go") != 0) && (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}"))))
     {
         // If message is data X & Y from encoder
@@ -219,7 +215,6 @@ string ResponeCallback(string message)
         sendPosXYZ();
         // _dtMessage[0] = "X:" + to_string(posXYZ[0]) + " Y:" + to_string(posXYZ[1]) + " ∠:" + to_string(posXYZ[2]) + "°";
     }
-    // else if (Regex.IsMatch(_dtMessage[0], "go[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}"))
     else if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("go[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}")))
     {
         threadGoto(useAs, _dtMessage[0]);
@@ -314,7 +309,7 @@ void listenClient(int listening)
     memset(service, 0, NI_MAXSERV);
 
     printf("IP address is: %s\n", inet_ntoa(client.sin_addr));
-    printf("port is: %d\n", (int) ntohs(client.sin_port));
+    // printf("port is: %d\n", (int) ntohs(client.sin_port));
 
     if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
         cout << host << " connected on port " << service << endl; }
@@ -348,7 +343,7 @@ int setupServer(int port)
 
     // Tell Winsock the socket is for listening
     listen(listening, SOMAXCONN);
-    cout  << "Listening to TCP clients at : " << port << endl;
+    cout  << "Listening to TCP clients at " << getMyIP() << " : " << port << endl;
     listenClient(listening);
 }
 
@@ -453,13 +448,6 @@ void setCommand()
         cout << "% setCommand error \n~\n" << e.what() << endl; }
 }
 
-void threadJoin()
-{
-    th_setCommand.join();
-    // th_Received.join();
-    // th_KeyPress.join();
-}
-
 int main()
 {
     printf("~ Welcome to Robot Core ~ \n");
@@ -468,6 +456,5 @@ int main()
     setupServer(8686);
     thread th_setCommand(setCommand);
     th_setCommand.join();
-    // threadJoin();
     return 0;
 }
