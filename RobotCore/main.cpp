@@ -51,6 +51,13 @@ string trim(const string &str)
     return trim_left(trim_right(str));
 }
 
+string toLowers(string s)
+{
+    for (int i =0; i< s.size(); i++)
+        s[i] = tolower(s[i], locale());
+    return s;
+}
+
 string getMyIP(){
     struct ifaddrs * ifAddrStruct=NULL;
     struct ifaddrs * ifa=NULL;
@@ -83,37 +90,42 @@ string getMyIP(){
 
 void sendCallBack(string message)
 {
-    if ((!message.empty()) && (message != "quit"))
+    if ((!message.empty()) && (toLowers(message) != "quit"))
     {
         char buf[bufSize];
 
-        //	Send to server
-        int sendRes = send(clientSocket, trim(message).c_str(), message.size() + 1, 0);
-        if (sendRes == -1)
+        if (clientSocket != 0)
         {
-            cout << "Could not send to server! Whoops!\r\n";
-            // continue;
-            return;
-        }
-        else
-        {
-            cout << "@ " << "[BaseStation]" << " : " << trim(message) << endl;
-        }
+            //	Send to server
+            int sendRes = send(clientSocket, trim(message).c_str(), message.size() + 1, 0);
+            if (sendRes == -1)
+            {
+                cout << "Could not send to server! Whoops!\r\n";
+                // continue;
+                return;
+            }
+            else
+            {
+                cout << "@ " << "[BaseStation]" << " : " << trim(message) << endl;
+            }
 
-        // //		Wait for response
-        // memset(buf, 0, bufSize);
-        // int bytesReceived = recv(clientSocket, buf, bufSize, 0);
-        // if (bytesReceived == -1) {
-        //     cout << "There was an error getting response from server\r\n"; }
-        // else {
-        //     //		Display response
-        //     cout << "SERVER> " << string(buf, bytesReceived) << "\r\n"; }
+            // //		Wait for response
+            // memset(buf, 0, bufSize);
+            // int bytesReceived = recv(clientSocket, buf, bufSize, 0);
+            // if (bytesReceived == -1) {
+            //     cout << "There was an error getting response from server\r\n"; }
+            // else {
+            //     //		Display response
+            //     cout << "SERVER> " << string(buf, bytesReceived) << "\r\n"; }
+        }
+        else 
+            printf("!...Not Connected...!");
     }
 }
 
 void sendPosXYZ()
 {
-    string message = to_string(posXYZ[0]) + "," + to_string(posXYZ[1]) + "," + to_string(posXYZ[2]);
+    string message = "E" + to_string(posXYZ[0]) + "," + to_string(posXYZ[1]) + "," + to_string(posXYZ[2]);
     sendCallBack(message);
 }
 
@@ -123,7 +135,6 @@ void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int sh
         cout << "# " << Robot << " : Goto >> " << "X:" << endX << " Y:" << endY << " ∠:" << endAngle << "°" << endl;
         bool chk[] = { true, true, true };
         while (chk[0] |= chk[1] |= chk[2]) {
-            // cout << "wkwkw A " << chk[0] << chk[1] << chk[2] << endl;
             if (posXYZ[0] > 12000)
                 posXYZ[0] = stoi (to_string(posXYZ[0]).substr (0, 4));
             if (posXYZ[1] > 9000)
@@ -180,72 +191,233 @@ void threadGoto (string keyName, string message)
         gotoDict[keyName].detach();
         gotoDict.erase (keyName);
     }
-    for (stringstream ss(message.substr(2)); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
+    for (stringstream ss(message); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
     gotoDict[keyName] = thread( GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
 }
 
-string ResponeCallback(string message)
+string ResponeSendCallback(string message)
 {
-    string respone = "", item;
-    vector<string> _dtMessage, msgXYZ;
+    string respone = "", text = "", item;
+    vector<string> _dtMessage;
     for (stringstream ss(message); (getline(ss, item, '|')); (_dtMessage.push_back(item)));
-    if ((_dtMessage[0].find("go") != 0) && (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}"))))
+    
+    if ((_dtMessage[0].find("!") == 0) && (_dtMessage[0].size() > 1)) {
+        _dtMessage.clear();
+        _dtMessage.push_back(_dtMessage[0].substr(1)); _dtMessage.push_back("Robot1,Robot2,Robot3"); }
+    if ((_dtMessage[0].find("**") == 0) && (_dtMessage[0].size() > 2)) {
+        respone = _dtMessage[0];
+        goto broadcast; }
+    else if ((_dtMessage[0].find("*") == 0) && (_dtMessage[0].size() > 1)) {
+        goto multicast; }
+
+    if (toLowers(_dtMessage[0]) == "myip") {
+        text = "MyIP: "+ getMyIP();
+        respone = getMyIP();
+        if (clientSocket != 0)
+            goto multicast;
+        goto end; }
+    else if (toLowers(_dtMessage[0]) == "as") {
+        text = "UseAs: "+ useAs;
+        goto end; }
+    // else if ((_socketDict.ContainsKey("BaseStation")) && (socket.Client.RemoteEndPoint.ToString().Contains(_socketDict["BaseStation"].Client.RemoteEndPoint.ToString())))
+    else if (clientSocket != 0)
     {
-        // If message is data X & Y from encoder
-        /// Scale is 1 : 20StartStart
-        for (stringstream ss(_dtMessage[0]); (getline(ss, item, ',')); (msgXYZ.push_back(item)));
-        _dtMessage[0].clear();
-        ;
-        if (msgXYZ.size() > 3) // If data receive multi value X & Y (error bug problem)
-        {
-            msgXYZ[0] = msgXYZ[msgXYZ.size() - 3].substr(msgXYZ[msgXYZ.size() - 1].size());
-            msgXYZ[1] = msgXYZ[msgXYZ.size() - 2];
-            msgXYZ[2] = msgXYZ[msgXYZ.size() - 1];
+        // If to send Base Station socket
+        /// LOCATION ///
+        if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(go|Go|GO)[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}$")))
+        { //Goto Location           
+            threadGoto(useAs, _dtMessage[0].substr(2));
+            goto end;
         }
-        if ((!isBlank(msgXYZ[0])) && (stoll(msgXYZ[0]) > 12000))
-            msgXYZ[0] = msgXYZ[0].substr(0, 4);
-        if ((!isBlank(msgXYZ[1])) && (stoll(msgXYZ[1]) > 9000))
-            msgXYZ[1] = msgXYZ[1].substr(0, 4);
-        if ((!isBlank(msgXYZ[2])) && (stoll(msgXYZ[2]) > 360))
-            msgXYZ[2] = msgXYZ[2].substr(0, 2);
+
+        /// INFORMATION ///
+        else if (_dtMessage[0] == "B")
+        { //Get the Ball
+            respone = "B_";
+            goto broadcast;
+        }
+        else if (_dtMessage[0] == "b")
+        { //Lose the Ball
+            respone = "b_";
+            goto broadcast;
+        }
+
+        /// OTHERS ///
+    }
+    goto multicast;
+
+broadcast:
+    sendCallBack(respone + "|" + "Robot1,Robot2,Robot3");
+    // sendByHostList("BaseStation", respone + "|" + "Robot1,Robot2,Robot3");
+    goto end;
+
+multicast:
+    if (isBlank(respone))
+        respone = _dtMessage[0];
+    if (_dtMessage.size() > 1)
+        sendCallBack(respone + "|" + _dtMessage[1]);
+    else
+        sendCallBack(respone);
+    // sendByHostList("BaseStation", respone + "|" + chkRobotCollect);
+    goto end;
+
+end:
+    if (!isBlank(text))
+        cout << "# " << text << endl;
+    return respone;
+}
+
+string ResponeReceivedCallback(string message)
+{
+    string respone = "", text = "", item;
+    vector<string> _dtMessage, msgXYZs, msgXYZ;
+    for (stringstream ss(message); (getline(ss, item, '|')); (_dtMessage.push_back(item)));
+    if ((_dtMessage[0].find("!") == 0) && (_dtMessage[0].size() > 1)) {         // Broadcast message
+        _dtMessage.clear();
+        _dtMessage.push_back(_dtMessage[0].substr(1)); _dtMessage.push_back("Robot1,Robot2,Robot3"); }
+    if ((_dtMessage[0].find("**") == 0) && (_dtMessage[0].size() > 2)) {        // Forward & Broadcast message
+        respone = _dtMessage[0].substr(2);
+        goto broadcast; }
+    else if ((_dtMessage[0].find("*") == 0) && (_dtMessage[0].size() > 1)) {    // Forward & Multicast essage
+        respone = _dtMessage[0].substr(1);
+        goto multicast; }
+
+    if ((toLowers(_dtMessage[0]).find("go") != 0) && (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("E[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}"))))
+    {
+        // Ifrespone message is data X & Y from encoder
+        /// Scale is 1 : 20
+        for (stringstream ss(_dtMessage[0]); (getline(ss, item, 'E')); (msgXYZs.push_back(item)));
+        for (stringstream ss(msgXYZs.back()); (getline(ss, item, ',')); (msgXYZ.push_back(item)));
 
         for (int i = 0; i < msgXYZ.size(); i++)
-            posXYZ[i] = stoll(msgXYZ[i]);
-
+            posXYZ[i] = stoi(msgXYZ[i]);
         sendPosXYZ();
-        // _dtMessage[0] = "X:" + to_string(posXYZ[0]) + " Y:" + to_string(posXYZ[1]) + " ∠:" + to_string(posXYZ[2]) + "°";
-    }
-    else if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("go[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}")))
-    {
-        threadGoto(useAs, _dtMessage[0]);
+        // text = "X:" + to_string(posXYZ[0]) + " Y:" + to_string(posXYZ[1]) + " ∠:" + to_string(posXYZ[2]) + "°";
     }
     // else if ((_socketDict.ContainsKey("BaseStation")) && (socket.Client.RemoteEndPoint.ToString().Contains(_socketDict["BaseStation"].Client.RemoteEndPoint.ToString())))
     else if (clientSocket != 0)
     // else if (true)
     {
         // If socket is Base Station socket
+        ////    REFEREE BOX COMMANDSt	////
+        {
+        /// 1. DEFAULT COMMANDS ///
+            if (_dtMessage[0] == "S") { //STOP
+                text = "STOP"; }
+            if (_dtMessage[0] == "s") { //START
+                text = "START"; }
+            if (_dtMessage[0] == "W") { //WELCOME (welcome message)
+                text = "WELCOME"; }
+            if (_dtMessage[0] == "Z") { //RESET (Reset Game)
+                text = "RESET"; }
+            if (_dtMessage[0] == "U") { //TESTMODE_ON (TestMode On)
+                text = "TESTMODE_ON"; }
+            if (_dtMessage[0] == "u") { //TESTMODE_OFF (TestMode Off)
+                text = "TESTMODE_OFF"; }
+
+        /// 3. GAME FLOW COMMANDS ///
+            if (_dtMessage[0] == "1") { //FIRST_HALF
+                text = "FIRST_HALF"; }
+            if (_dtMessage[0] == "2") { //SECOND_HALF
+                text = "SECOND_HALF"; }
+            if (_dtMessage[0] == "3") { //FIRST_HALF_OVERTIME
+                text = "FIRST_HALF_OVERTIME"; }
+            if (_dtMessage[0] == "4") { //SECOND_HALF_OVERTIME
+                text = "SECOND_HALF_OVERTIME"; }
+            if (_dtMessage[0] == "h") { //HALF_TIME
+                text = "HALF_TIME"; }
+            if (_dtMessage[0] == "e") { //END_GAME (ends 2nd part, may go into overtime)
+                text = "END_GAME"; }
+            if (_dtMessage[0] == "z") { //GAMEOVER (Game Over)
+                text = "GAMEOVER"; }
+            if (_dtMessage[0] == "L") { //PARKING
+                text = "PARKING"; }
+        
+        /// 2. PENALTY COMMANDS ///
+            if (_dtMessage[0] == "Y") { //YELLOW_CARD_CYAN
+                text = "YELLOW_CARD_CYAN"; }
+            if (_dtMessage[0] == "R") { //RED_CARD_CYAN
+                text = "RED_CARD_CYAN"; }
+            if (_dtMessage[0] == "B") { //DOUBLE_YELLOW_CYAN
+                text = "DOUBLE_YELLOW_CYAN"; }
+
+        /// 4. GOAL STATUS ///
+            if (_dtMessage[0] == "A") { //GOAL_CYAN
+                text = "GOAL_CYAN"; }
+            if (_dtMessage[0] == "D") { //SUBGOAL_CYAN
+                text = "SUBGOAL_CYAN"; }
+
+        /// 5. GAME FLOW COMMANDS ///
+            if (_dtMessage[0] == "K") { //KICKOFF_CYAN
+                text = "KICKOFF_CYAN"; }
+            if (_dtMessage[0] == "F") { //FREEKICK_CYAN
+                text = "FREEKICK_CYAN"; }
+            if (_dtMessage[0] == "G") { //GOALKICK_CYAN
+                text = "GOALKICK_CYAN"; }
+            if (_dtMessage[0] == "T") { //THROWN_CYAN
+                text = "THROWN_CYAN"; }
+            if (_dtMessage[0] == "C") { //CORNER_CYAN
+                text = "CORNER_CYAN"; }
+
+        /// 2. PENALTY COMMANDS ///
+            if (_dtMessage[0] == "y") { //YELLOW_CARD_MAGENTA	
+                text = "YELLOW_CARD_MAGENTA"; }
+            if (_dtMessage[0] == "r") { //RED_CARD_MAGENTA
+                text = "RED_CARD_MAGENTA"; }
+            if (_dtMessage[0] == "b") { //DOUBLE_YELLOW_MAGENTA
+                text = "DOUBLE_YELLOW_MAGENTA"; }
+
+        /// 4. GOAL STATUS ///
+            if (_dtMessage[0] == "a") { //GOAL_MAGENTA
+                text = "GOAL_MAGENTA"; }
+            if (_dtMessage[0] == "d") { //SUBGOAL_MAGENTA
+                text = "SUBGOAL_MAGENTA"; }
+
+        /// 5. GAME FLOW COMMANDS ///
+            if (_dtMessage[0] == "k") { //KICKOFF_MAGENTA
+                text = "KICKOFF_MAGENTA"; }
+            if (_dtMessage[0] == "f") { //FREEKICK_MAGENTA
+                text = "FREEKICK_MAGENTA"; }
+            if (_dtMessage[0] == "g") { //GOALKICK_MAGENTA
+                text = "GOALKICK_MAGENTA"; }
+            if (_dtMessage[0] == "t") { //THROWN_MAGENTA
+                text = "THROWN_MAGENTA"; }
+            if (_dtMessage[0] == "c") { //CORNER_MAGENTA
+                text = "CORNER_MAGENTA"; }
+        }
+
         /// INFORMATION ///
-        if (_dtMessage[0] == "B")
+        if (_dtMessage[0].find("B_Robot") == 0)
         { //Get the ball
-            respone = "Ball on " + useAs /*+ socketToName(socket)*/;
-            goto broadcast;
+            text = "Get the ball";
+        }
+        else if (_dtMessage[0] == "b_")
+        { //Lose the ball
+            text = "Lose the ball  ";
         }
 
         /// OTHERS ///
-        else if (_dtMessage[0] == "ip")
-        {
+        else if (toLowers(_dtMessage[0]) == "ping")
+        { //PING-REPLY
+            respone = "Reply " + useAs;
+            goto multicast;
+        }
+        else if (toLowers(_dtMessage[0]) == "ip")
+        { //IP Address Info
             respone = getMyIP();
             goto multicast;
         }
-        else if (_dtMessage[0] == "get_time")
+        else if (toLowers(_dtMessage[0]) == "get_time")
         { //TIME NOW
             time_t ct = time(0);
             respone = ctime(&ct);
             goto multicast;
         }
-        else;
-            // printf("# Invalid Command :< \n");
+        // else
+        //     respone = text = "# Invalid Command :<";
     }
+    if ((isBlank(respone)) && (_dtMessage.size() > 1))
+        sendCallBack(_dtMessage[0] + "|" + _dtMessage[1]);
     goto end;
 
 broadcast:
@@ -262,17 +434,18 @@ multicast:
     goto end;
 
 end:
-    // if (!_dtMessage[0].empty())
-    //     cout << "> " << "[" << useAs << "]" << " : " << _dtMessage[0];
-    return respone;
+    if (!isBlank(text))
+        cout << "# " << text << endl;
+   return respone;
 }
 
 void receivedCallBack()
 {
     string message = "";
-    for (m.lock(); (true) && (message != "quit"); message.clear(), m.unlock())
+    // for (m.lock(); (true) && (toLowers(message) != "quit"); message.clear(), m.unlock())
+    while ((true) && (toLowers(message) != "quit"))
     {
-        // While loop: accept and echo message back to clientuserInput
+        // While loop: accept and echo message back to client user Input
         char buf[bufSize];
         memset(buf, 0, bufSize);
 
@@ -287,7 +460,7 @@ void receivedCallBack()
             break; }
         message = trim(string(buf, 0, bytesReceived));
         cout << "> " << "[BaseStation]" << " : " << message << endl;
-        ResponeCallback(message);
+        ResponeReceivedCallback(message);
         
         // Echo message back to client
         // send(clientSocket, buf, bytesReceived + 1, 0);
@@ -322,6 +495,8 @@ void listenClient(int listening)
 
     // Start received message
     th_Received = thread(receivedCallBack);
+    sendCallBack(useAs);
+    sendPosXYZ();
 }
 
 int setupServer(int port)
@@ -329,7 +504,6 @@ int setupServer(int port)
     cout << "Server Starting..." << endl;
     // Create a socket
     listening = socket(AF_INET, SOCK_STREAM, 0);
-    // int listening = socket(AF_INET, SOCK_STREAM, 0);
     if (listening == -1) {
         cerr << "Can't create a socket! Quitting" << endl;
         return -1; }
@@ -373,7 +547,7 @@ int kbhit(void)
 void keyEvent(string key)
 {
     int _temp[3];
-    copy(begin(posXYZ), end(posXYZ), begin(_temp));
+    copy(begin(posXYZ), (posXYZ), begin(_temp));
     if (key == "[C")
         posXYZ[0] += 1;
     else if (key == "[D")
@@ -418,28 +592,15 @@ void setCommand()
 {
     try {        
         string Command;
-        for (m.lock(); (true) && (Command != "quit"); m.unlock()){
+        for (m.lock(); (true) && (toLowers(Command) != "quit"); m.unlock()){
             getline(cin, Command);
 
-            if (Command == "quit") {
-                close(listening);
-                close(clientSocket);
-            }
-            else if (Command == "key") {
+            if (Command == "/") {
                 thread th_keyPress(keyPress);
                 th_keyPress.join();
             }
-            else if ((clientSocket != 0) && (Command.find("go") == 0))
-                ResponeCallback(Command);
-            else if (Command == "myip")            
-                cout << "# MyIP: " << getMyIP() << endl;
-            else if (Command == "as")            
-                cout << "# UseAs: " << useAs << endl;
-            else if (clientSocket != 0)
-                sendCallBack(Command);
-            else
-                printf("!...not Connected...! \n"); }  
-
+            else if (!isBlank(Command))
+                ResponeSendCallback(Command); }
         close(listening);
         close(clientSocket);
         cout << "# Close App" << endl;
@@ -450,8 +611,14 @@ void setCommand()
 
 int main()
 {
-    printf("~ Welcome to Robot Core ~ \n");
-    printf("Use As: "); cin >> useAs;
+    for (m.lock(); isBlank(useAs); m.unlock()){
+        system("clear");
+        printf("~ Welcome to Robot Core ~ \n");
+        printf("Use As: "); cin >> useAs;
+        if ((useAs == "1") ^ (toLowers(useAs) == "r1") ^ (toLowers(useAs) == "robot1")) useAs = "Robot1";
+        else if ((useAs == "2") ^ (toLowers(useAs) == "r2") ^ (toLowers(useAs) == "robot2")) useAs = "Robot2";
+        else if (((useAs == "3") ^ toLowers(useAs) == "r3") ^ (toLowers(useAs) == "robot3")) useAs = "Robot3";
+        else useAs.clear(); }
     getMyIP();
     setupServer(8686);
     thread th_setCommand(setCommand);
