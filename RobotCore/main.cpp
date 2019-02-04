@@ -22,7 +22,8 @@
 
 using namespace std;
 
-string useAs, myIP = "0.0.0.0";
+string useAs, myIP = "0.0.0.0", ballOn = "";
+bool ball = false;
 int listening, clientSocket = 0, bufSize = 4096;
 int posXYZ[3] = {0, 0, 0};
 map<string, thread> gotoDict;
@@ -62,6 +63,8 @@ string getMyIP(){
     struct ifaddrs * ifAddrStruct=NULL;
     struct ifaddrs * ifa=NULL;
     void * tmpAddrPtr=NULL;
+    int ctr = 0;
+    myIP.clear();
 
     getifaddrs(&ifAddrStruct);
     for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
@@ -73,8 +76,10 @@ string getMyIP(){
             tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
             char addressBuffer[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-            if ((ifa->ifa_name) != "lo")
-                myIP = addressBuffer;
+            if ((ifa->ifa_name) != "lo") {
+                if (ctr > 0)
+                    myIP += ',';
+            myIP += addressBuffer; ctr++; }
             // printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
         } else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
             // is a valid IP6 Address
@@ -90,7 +95,7 @@ string getMyIP(){
 
 void sendCallBack(string message)
 {
-    if ((!message.empty()) && (toLowers(message) != "quit"))
+    if ((!isBlank(message)) && (toLowers(message) != "quit"))
     {
         char buf[bufSize];
 
@@ -224,25 +229,35 @@ string ResponeSendCallback(string message)
     {
         // If to send Base Station socket
         /// LOCATION ///
-        if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(go|Go|GO)[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}$")))
-        { //Goto Location           
-            threadGoto(useAs, _dtMessage[0].substr(2));
+        if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(go|Go|gO|GO)[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}$")))
+        { //Goto Location
+            if (_dtMessage.size() > 1)
+                goto multicast;
+            else
+                threadGoto(useAs, _dtMessage[0].substr(2));
             goto end;
         }
 
         /// INFORMATION ///
         else if (_dtMessage[0] == "B")
         { //Get the Ball
+            ball = true;
             respone = "B_";
             goto broadcast;
         }
         else if (_dtMessage[0] == "b")
         { //Lose the Ball
+            ball = false;
             respone = "b_";
             goto broadcast;
         }
 
         /// OTHERS ///
+        else if (_dtMessage[0] == ";")
+        { //PING
+            respone = "ping";
+            goto multicast;
+        }
     }
     goto multicast;
 
@@ -294,106 +309,140 @@ string ResponeReceivedCallback(string message)
         sendPosXYZ();
         // text = "X:" + to_string(posXYZ[0]) + " Y:" + to_string(posXYZ[1]) + " ∠:" + to_string(posXYZ[2]) + "°";
     }
+    else if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(go|Go|gO|GO)[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4},[-]{0,1}[0-9]{1,4}$")))
+    { //Goto Location
+        if (_dtMessage.size() > 1)
+            goto multicast;
+        else
+            threadGoto(useAs, _dtMessage[0].substr(2));
+        goto end;
+    }
     // else if ((_socketDict.ContainsKey("BaseStation")) && (socket.Client.RemoteEndPoint.ToString().Contains(_socketDict["BaseStation"].Client.RemoteEndPoint.ToString())))
     else if (clientSocket != 0)
     // else if (true)
     {
         // If socket is Base Station socket
         ////    REFEREE BOX COMMANDSt	////
-        {
+        ///{
         /// 1. DEFAULT COMMANDS ///
             if (_dtMessage[0] == "S") { //STOP
                 text = "STOP"; }
-            if (_dtMessage[0] == "s") { //START
+            else if (_dtMessage[0] == "s") { //START
                 text = "START"; }
-            if (_dtMessage[0] == "W") { //WELCOME (welcome message)
+            else if (_dtMessage[0] == "W") { //WELCOME (welcome message)
                 text = "WELCOME"; }
-            if (_dtMessage[0] == "Z") { //RESET (Reset Game)
+            else if (_dtMessage[0] == "Z") { //RESET (Reset Game)
                 text = "RESET"; }
-            if (_dtMessage[0] == "U") { //TESTMODE_ON (TestMode On)
+            else if (_dtMessage[0] == "U") { //TESTMODE_ON (TestMode On)
                 text = "TESTMODE_ON"; }
-            if (_dtMessage[0] == "u") { //TESTMODE_OFF (TestMode Off)
+            else if (_dtMessage[0] == "u") { //TESTMODE_OFF (TestMode Off)
                 text = "TESTMODE_OFF"; }
 
         /// 3. GAME FLOW COMMANDS ///
-            if (_dtMessage[0] == "1") { //FIRST_HALF
+            else if (_dtMessage[0] == "1") { //FIRST_HALF
                 text = "FIRST_HALF"; }
-            if (_dtMessage[0] == "2") { //SECOND_HALF
+            else if (_dtMessage[0] == "2") { //SECOND_HALF
                 text = "SECOND_HALF"; }
-            if (_dtMessage[0] == "3") { //FIRST_HALF_OVERTIME
+            else if (_dtMessage[0] == "3") { //FIRST_HALF_OVERTIME
                 text = "FIRST_HALF_OVERTIME"; }
-            if (_dtMessage[0] == "4") { //SECOND_HALF_OVERTIME
+            else if (_dtMessage[0] == "4") { //SECOND_HALF_OVERTIME
                 text = "SECOND_HALF_OVERTIME"; }
-            if (_dtMessage[0] == "h") { //HALF_TIME
+            else if (_dtMessage[0] == "h") { //HALF_TIME
                 text = "HALF_TIME"; }
-            if (_dtMessage[0] == "e") { //END_GAME (ends 2nd part, may go into overtime)
+            else if (_dtMessage[0] == "e") { //END_GAME (ends 2nd part, may go into overtime)
                 text = "END_GAME"; }
-            if (_dtMessage[0] == "z") { //GAMEOVER (Game Over)
+            else if (_dtMessage[0] == "z") { //GAMEOVER (Game Over)
                 text = "GAMEOVER"; }
-            if (_dtMessage[0] == "L") { //PARKING
+            else if (_dtMessage[0] == "L") { //PARKING
                 text = "PARKING"; }
+            else if (_dtMessage[0] == "N") { //DROP_BALL
+                text = "DROP_BALL"; }
         
         /// 2. PENALTY COMMANDS ///
-            if (_dtMessage[0] == "Y") { //YELLOW_CARD_CYAN
+            else if (_dtMessage[0] == "Y") { //YELLOW_CARD_CYAN
                 text = "YELLOW_CARD_CYAN"; }
-            if (_dtMessage[0] == "R") { //RED_CARD_CYAN
+            else if (_dtMessage[0] == "R") { //RED_CARD_CYAN
                 text = "RED_CARD_CYAN"; }
-            if (_dtMessage[0] == "B") { //DOUBLE_YELLOW_CYAN
+            else if (_dtMessage[0] == "B") { //DOUBLE_YELLOW_CYAN
                 text = "DOUBLE_YELLOW_CYAN"; }
 
         /// 4. GOAL STATUS ///
-            if (_dtMessage[0] == "A") { //GOAL_CYAN
+            else if (_dtMessage[0] == "A") { //GOAL_CYAN
                 text = "GOAL_CYAN"; }
-            if (_dtMessage[0] == "D") { //SUBGOAL_CYAN
+            else if (_dtMessage[0] == "D") { //SUBGOAL_CYAN
                 text = "SUBGOAL_CYAN"; }
 
         /// 5. GAME FLOW COMMANDS ///
-            if (_dtMessage[0] == "K") { //KICKOFF_CYAN
+            else if (_dtMessage[0] == "K") { //KICKOFF_CYAN
                 text = "KICKOFF_CYAN"; }
-            if (_dtMessage[0] == "F") { //FREEKICK_CYAN
+            else if (_dtMessage[0] == "F") { //FREEKICK_CYAN
                 text = "FREEKICK_CYAN"; }
-            if (_dtMessage[0] == "G") { //GOALKICK_CYAN
+            else if (_dtMessage[0] == "G") { //GOALKICK_CYAN
                 text = "GOALKICK_CYAN"; }
-            if (_dtMessage[0] == "T") { //THROWN_CYAN
+            else if (_dtMessage[0] == "T") { //THROWN_CYAN
                 text = "THROWN_CYAN"; }
-            if (_dtMessage[0] == "C") { //CORNER_CYAN
+            else if (_dtMessage[0] == "C") { //CORNER_CYAN
                 text = "CORNER_CYAN"; }
+            else if (_dtMessage[0] == "P") { //PENALTY_CYAN
+                text = "PENALTY_CYAN"; }
+            else if (_dtMessage[0] == "O") { //REPAIR_CYAN
+                text = "REPAIR_CYAN"; }
 
         /// 2. PENALTY COMMANDS ///
-            if (_dtMessage[0] == "y") { //YELLOW_CARD_MAGENTA	
+            else if (_dtMessage[0] == "y") { //YELLOW_CARD_MAGENTA	
                 text = "YELLOW_CARD_MAGENTA"; }
-            if (_dtMessage[0] == "r") { //RED_CARD_MAGENTA
+            else if (_dtMessage[0] == "r") { //RED_CARD_MAGENTA
                 text = "RED_CARD_MAGENTA"; }
-            if (_dtMessage[0] == "b") { //DOUBLE_YELLOW_MAGENTA
+            else if (_dtMessage[0] == "b") { //DOUBLE_YELLOW_MAGENTA
                 text = "DOUBLE_YELLOW_MAGENTA"; }
 
         /// 4. GOAL STATUS ///
-            if (_dtMessage[0] == "a") { //GOAL_MAGENTA
+            else if (_dtMessage[0] == "a") { //GOAL_MAGENTA
                 text = "GOAL_MAGENTA"; }
-            if (_dtMessage[0] == "d") { //SUBGOAL_MAGENTA
+            else if (_dtMessage[0] == "d") { //SUBGOAL_MAGENTA
                 text = "SUBGOAL_MAGENTA"; }
 
         /// 5. GAME FLOW COMMANDS ///
-            if (_dtMessage[0] == "k") { //KICKOFF_MAGENTA
+            else if (_dtMessage[0] == "k") { //KICKOFF_MAGENTA
                 text = "KICKOFF_MAGENTA"; }
-            if (_dtMessage[0] == "f") { //FREEKICK_MAGENTA
+            else if (_dtMessage[0] == "f") { //FREEKICK_MAGENTA
                 text = "FREEKICK_MAGENTA"; }
-            if (_dtMessage[0] == "g") { //GOALKICK_MAGENTA
+            else if (_dtMessage[0] == "g") { //GOALKICK_MAGENTA
                 text = "GOALKICK_MAGENTA"; }
-            if (_dtMessage[0] == "t") { //THROWN_MAGENTA
+            else if (_dtMessage[0] == "t") { //THROWN_MAGENTA
                 text = "THROWN_MAGENTA"; }
-            if (_dtMessage[0] == "c") { //CORNER_MAGENTA
+            else if (_dtMessage[0] == "c") { //CORNER_MAGENTA
                 text = "CORNER_MAGENTA"; }
-        }
+            else if (_dtMessage[0] == "p") { //PENALTY_MAGENTA
+                text = "PENALTY_MAGENTA"; }
+            else if (_dtMessage[0] == "o") { //REPAIR_MAGENTA
+                text = "REPAIR_MAGENTA"; }
+        ///}
 
         /// INFORMATION ///
-        if (_dtMessage[0].find("B_Robot") == 0)
+        else if (_dtMessage[0].find("B_Robot") == 0)
         { //Get the ball
-            text = "Get the ball";
+            text = "Ball on " + (ballOn = _dtMessage[0].substr(2));
+            if (ballOn == useAs)
+                ball = true;
+            else
+                ball = false;
         }
         else if (_dtMessage[0] == "b_")
         { //Lose the ball
+            ballOn.clear();
             text = "Lose the ball  ";
+        }
+        else if (_dtMessage[0] == "B?")
+        { //Ball Status
+            if (ball)
+                respone = "B_";
+            else if ((!ball) && (isBlank(ballOn)))
+                respone = "b_";
+            else {
+                respone = "0";
+                goto multicast; }
+            goto broadcast; 
         }
 
         /// OTHERS ///
@@ -458,9 +507,10 @@ void receivedCallBack()
         if (bytesReceived == 0) {
             cout << "Client disconnected " << endl;
             break; }
+        if (!isBlank(message)) {
         message = trim(string(buf, 0, bytesReceived));
         cout << "> " << "[BaseStation]" << " : " << message << endl;
-        ResponeReceivedCallback(message);
+        ResponeReceivedCallback(message); }
         
         // Echo message back to client
         // send(clientSocket, buf, bytesReceived + 1, 0);
