@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <string>
+#include <vector>
 #include <thread>
 #include <pthread.h>
 #include <mutex>
@@ -24,10 +25,12 @@ using namespace std;
 
 string useAs, myIP = "0.0.0.0", ballOn = "";
 bool ball = false;
-int listening, clientSocket = 0, bufSize = 4096;
+int listening, bufSize = 4096;
 int posXYZ[3] = {0, 0, 0};
 map<string, thread> gotoDict;
-thread th_Received, th_setCommand, th_keyPress;
+map<string, int> socketDict;
+map<string, thread> th_Receiveds;
+thread th_Received, th_setCommand, th_keyPress, th_setupServer, th_chkCon;
 sockaddr_in client;
 mutex m;
 
@@ -57,6 +60,15 @@ string toLowers(string s)
     for (int i =0; i< s.size(); i++)
         s[i] = tolower(s[i], locale());
     return s;
+}
+
+template<typename K, typename V>
+string keyByValue(map<K, V> m, V value)
+{
+    for (auto &i : m)
+        if (i.second == value)
+            return i.first;
+    return 0;
 }
 
 string getMyIP(){
@@ -92,45 +104,63 @@ string getMyIP(){
     return myIP;
 }
 
-void sendCallBack(string message)
+void checkConnection()
 {
-    if ((!isBlank(message)) && (toLowers(message) != "quit"))
-    {
-        char buf[bufSize];
-
-        if (clientSocket != 0)
+    try {
+        // for (m.lock(); true; m.unlock()) 
         {
-            //	Send to server
-            int sendRes = send(clientSocket, trim(message).c_str(), message.size() + 1, 0);
-            if (sendRes == -1)
-            {
-                cout << "Could not send to server! Whoops!\r\n";
-                // continue;
-                return;
-            }
-            else
-            {
-                cout << "@ " << "[BaseStation]" << " : " << trim(message) << endl;
-            }
-
-            // //		Wait for response
-            // memset(buf, 0, bufSize);
-            // int bytesReceived = recv(clientSocket, buf, bufSize, 0);
-            // if (bytesReceived == -1) {
-            //     cout << "There was an error getting response from server\r\n"; }
-            // else {
-            //     //		Display response
-            //     cout << "SERVER> " << string(buf, bytesReceived) << "\r\n"; }
+            for (auto &i : socketDict) {
+                string key = i.first;
+                if (i.second == 0) {
+                    // close(i.second);
+                    th_Receiveds[key].detach();
+                    th_Receiveds.erase(key);
+                    socketDict.erase(key); } }
+        // usleep(1000000); 
         }
-        else 
-            printf("!...Not Connected...!");
     }
+    catch (exception e) {
+        cout << "# Check Connection error \n~\n" << e.what() << endl; }
+}
+
+void sendCallBack(int clientSocket, string message)
+{
+    try {
+        if ((!isBlank(trim(message))) /*&& (toLowers(message) != "quit")*/) {
+            char buf[bufSize];
+
+            if (clientSocket != 0)
+            {
+                //	Send to server
+                int sendRes = send(clientSocket, trim(message).c_str(), message.size() + 1, 0);
+                if (sendRes == -1) {
+                    cout << "Could not send to server! Whoops!\r\n";
+                    clientSocket = 0;
+                    return; }
+                else {
+                    cout << "@ " << keyByValue(socketDict, clientSocket) << " : " << trim(message) << endl; }
+
+                // //		Wait for response
+                // memset(buf, 0, bufSize);
+                // int bytesReceived = recv(clientSocket, buf, bufSize, 0);
+                // if (bytesReceived == -1) {
+                //     cout << "There was an error getting response from server\r\n"; }
+                // else {
+                //     //		Display response
+                //     cout << "SERVER> " << string(buf, bytesReceived) << "\r\n"; }
+            }
+            else 
+                printf("!...Not Connected...!"); }
+    } 
+    catch (exception e) {
+        cout << "# Send Callback error \n~\n" << e.what() << endl; }
 }
 
 void sendPosXYZ()
 {
-    string message = "E" + to_string(posXYZ[0]) + "," + to_string(posXYZ[1]) + "," + to_string(posXYZ[2]);
-    sendCallBack(message);
+    if (socketDict.count("BaseStation")) {
+        string message = "E" + to_string(posXYZ[0]) + "," + to_string(posXYZ[1]) + "," + to_string(posXYZ[2]);
+        sendCallBack(socketDict["BaseStation"], message); }
 }
 
 void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int shiftY, int shiftAngle) 
@@ -181,10 +211,8 @@ void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int sh
             sendPosXYZ();
             usleep (100000); // time per limit (microsecond)
         }
-    } catch (exception e) 
-    { 
-        cout << "# Error GotoLoc \n\n" << e.what() << endl;
-    }
+    } catch (exception e)  { 
+        cout << "% Error GotoLoc \n\n" << e.what() << endl; }
 }
 
 void threadGoto (string keyName, string message) 
@@ -199,7 +227,7 @@ void threadGoto (string keyName, string message)
     gotoDict[keyName] = thread( GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
 }
 
-string ResponeSendCallback(string message)
+string ResponeSendCallback(int clientSocket, string message)
 {
     string respone = "", text = "", item;
     vector<string> _dtMessage;
@@ -261,7 +289,7 @@ string ResponeSendCallback(string message)
     goto multicast;
 
 broadcast:
-    sendCallBack(respone + "|" + "Robot1,Robot2,Robot3");
+    sendCallBack(clientSocket, respone + "|" + "Robot1,Robot2,Robot3");
     // sendByHostList("BaseStation", respone + "|" + "Robot1,Robot2,Robot3");
     goto end;
 
@@ -269,9 +297,9 @@ multicast:
     if (isBlank(respone))
         respone = _dtMessage[0];
     if (_dtMessage.size() > 1)
-        sendCallBack(respone + "|" + _dtMessage[1]);
+        sendCallBack(clientSocket, respone + "|" + _dtMessage[1]);
     else
-        sendCallBack(respone);
+        sendCallBack(clientSocket, respone);
     // sendByHostList("BaseStation", respone + "|" + chkRobotCollect);
     goto end;
 
@@ -281,7 +309,7 @@ end:
     return respone;
 }
 
-string ResponeReceivedCallback(string message)
+string ResponeReceivedCallback(int clientSocket, string message)
 {
     string respone = "", text = "", item;
     vector<string> _dtMessage, msgXYZs, msgXYZ;
@@ -445,6 +473,17 @@ string ResponeReceivedCallback(string message)
         }
 
         /// OTHERS ///
+        else if (toLowers(_dtMessage[0]) == "basestation")
+        { //Info BS
+            text = "BS";
+            socketDict["BaseStation"] = clientSocket;
+            for (auto &i : socketDict)
+                if (i.first != "BaseStation") {
+                    // close(i.second);
+                    socketDict[i.first] = 0;
+                }
+            checkConnection();
+        }
         else if (toLowers(_dtMessage[0]) == "ping")
         { //PING-REPLY
             respone = "Reply " + useAs;
@@ -465,19 +504,19 @@ string ResponeReceivedCallback(string message)
         //     respone = text = "# Invalid Command :<";
     }
     if ((isBlank(respone)) && (_dtMessage.size() > 1))
-        sendCallBack(_dtMessage[0] + "|" + _dtMessage[1]);
+        sendCallBack(clientSocket, _dtMessage[0] + "|" + _dtMessage[1]);
     goto end;
 
 broadcast:
-    sendCallBack(respone + "|" + "Robot1,Robot2,Robot3");
+    sendCallBack(clientSocket, respone + "|" + "Robot1,Robot2,Robot3");
     // sendByHostList("BaseStation", respone + "|" + "Robot1,Robot2,Robot3");
     goto end;
 
 multicast:
     if (_dtMessage.size() > 1)
-        sendCallBack(respone + "|" + _dtMessage[1]);
+        sendCallBack(clientSocket, respone + "|" + _dtMessage[1]);
     else
-        sendCallBack(respone);
+        sendCallBack(clientSocket, respone);
     // sendByHostList("BaseStation", respone + "|" + chkRobotCollect);
     goto end;
 
@@ -487,87 +526,114 @@ end:
    return respone;
 }
 
-void receivedCallBack()
+void receivedCallBack(int clientSocket)
 {
-    string message = "";
-    // for (m.lock(); (true) && (toLowers(message) != "quit"); message.clear(), m.unlock())
-    while ((true) && (toLowers(message) != "quit"))
-    {
-        // While loop: accept and echo message back to client user Input
-        char buf[bufSize];
-        memset(buf, 0, bufSize);
+    try {
+        string message = "";
+        // for (m.lock(); (true) && (toLowers(message) != "quit"); message.clear(), m.unlock())
+        while ((true) && (toLowers(message) != "quit"))
+        {
+            // While loop: accept and echo message back to client user Input
+            char buf[bufSize];
+            memset(buf, 0, bufSize);
+            // Wait for client to send data
+            int bytesReceived = recv(clientSocket, buf, bufSize, 0);
+            if (bytesReceived == -1) {
+                sendCallBack(clientSocket, "quit");
+                cerr << "Error in receivedCallBack(). Quitting" << endl;
+                break; 
+                }
 
-        // Wait for client to send data
-        int bytesReceived = recv(clientSocket, buf, bufSize, 0);
-        if (bytesReceived == -1) {
-            cerr << "Error in receivedCallBack(). Quitting" << endl;
-            break; }
-
-        if (bytesReceived == 0) {
-            cout << "Client disconnected " << endl;
-            break; }
-        message = trim(string(buf, 0, bytesReceived));
-        if (!isBlank(message)) {
-	        cout << "> " << "[BaseStation]" << " : " << message << endl;
-	        ResponeReceivedCallback(message); }
-        
-        // Echo message back to client
-        // send(clientSocket, buf, bytesReceived + 1, 0);
+            if ((bytesReceived == 0) || (clientSocket == 0)) {
+                sendCallBack(clientSocket, "quit");
+                cout << "Client disconnected " << endl;
+                break; 
+                }
+            message = trim(string(buf, 0, bytesReceived));
+            if (!isBlank(message)) {
+                cout << "> " << keyByValue(socketDict, clientSocket) << " : " << message << endl;
+                ResponeReceivedCallback(clientSocket, message); 
+                }
+            
+            // Echo message back to client
+            // send(clientSocket, buf, bytesReceived + 1, 0);
+        }
+        // Close the socket
+        close(clientSocket);
+        clientSocket = 0;
     }
-    // Close the socket
-    close(clientSocket);
+    catch (exception e) {
+        cout << "# Received error \n~\n" << e.what() << endl; }
 }
 
 void listenClient(int listening)
 {
-    // Wait for a connection
-    socklen_t clientSize = sizeof(client);
-    clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
+    try 
+    {        
+        for (m.lock(); true; m.unlock())
+        // while (true)
+        {
+            // Wait for a connection
+            socklen_t clientSize = sizeof(client);
+            int clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
 
-    char host[NI_MAXHOST];      // Client's remote name
-    char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
+            char host[NI_MAXHOST];      // Client's remote name
+            char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
 
-    memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
-    memset(service, 0, NI_MAXSERV);
+            memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
+            memset(service, 0, NI_MAXSERV);
 
-    printf("IP address is: %s\n", inet_ntoa(client.sin_addr));
-    // printf("port is: %d\n", (int) ntohs(client.sin_port));
+            string IPAdd = inet_ntoa(client.sin_addr);
+            // printf("IP address is: %s\n", inet_ntoa(client.sin_addr));
+            // printf("port is: %d\n", (int) ntohs(client.sin_port));
 
-    if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
-        cout << host << " connected on port " << service << endl; }
-    else {
-        inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
-        cout << host << " connected on port " << ntohs(client.sin_port) << endl; }
+            if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
+                cout << "C" << clientSocket << " >> " << host << " connected on port " << service << endl; }
+            else {
+                inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
+                cout << "C" << clientSocket << " >> "  << host << " connected on port " << ntohs(client.sin_port) << endl; }
+            
+            socketDict[IPAdd+":"+to_string(clientSocket)] = clientSocket;
 
-    // Close listening socket
-    close(listening);
+            // Close listening socket
+            // close(listening);
 
-    // Start received message
-    th_Received = thread(receivedCallBack);
-    sendCallBack(useAs);
-    sendPosXYZ();
+            // Start received message
+            th_Receiveds[IPAdd+":"+to_string(clientSocket)] = thread(receivedCallBack, clientSocket);
+            sendCallBack(clientSocket, useAs);
+            sendPosXYZ();
+            checkConnection();
+            // thread th_chkCon(checkConnection);
+            // th_chkCon.join();
+        }
+    } 
+    catch (exception e) {
+        cout << "# Listening error \n~\n" << e.what() << endl; }
 }
 
 int setupServer(int port)
 {
-    cout << "Server Starting..." << endl;
-    // Create a socket
-    listening = socket(AF_INET, SOCK_STREAM, 0);
-    if (listening == -1) {
-        cerr << "Can't create a socket! Quitting" << endl;
-        return -1; }
+    try {
+        cout << "Server Starting..." << endl;
+        // Create a socket
+        listening = socket(AF_INET, SOCK_STREAM, 0);
+        if (listening == -1) {
+            cerr << "Can't create a socket! Quitting" << endl;
+            return -1; }
 
-    // Bind the ip address and port to a socket
-    sockaddr_in hint;
-    hint.sin_family = AF_INET;
-    hint.sin_port = htons(port);
-    inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
-    bind(listening, (sockaddr*)&hint, sizeof(hint));
+        // Bind the ip address and port to a socket
+        sockaddr_in hint;
+        hint.sin_family = AF_INET;
+        hint.sin_port = htons(port);
+        inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
+        bind(listening, (sockaddr*)&hint, sizeof(hint));
 
-    // Tell Winsock the socket is for listening
-    listen(listening, SOMAXCONN);
-    cout  << "Listening to TCP clients at " << getMyIP() << " : " << port << endl;
-    listenClient(listening);
+        // Tell Winsock the socket is for listening
+        listen(listening, SOMAXCONN); 
+        cout  << "Listening to TCP clients at " << getMyIP() << " : " << port << endl;
+        listenClient(listening); } 
+    catch (exception e) {
+        cout << "# Setup Server error \n~\n" << e.what() << endl; }
 }
 
 
@@ -611,7 +677,7 @@ void keyEvent(string key)
         posXYZ[2] -= 1;
 
     for (int i = 0; i < 3; i++)
-        if ((posXYZ[i] != _temp[i]) && (clientSocket != 0) /*&& (_socketDict.ContainsKey("BaseStation"))*/){
+        if ((posXYZ[i] != _temp[i]) && socketDict.count("BaseStation") /*&& (_socketDict.ContainsKey("BaseStation"))*/){
             sendPosXYZ();
             break; }
     // cout << "# X:" << posXYZ[0] << " Y:" << posXYZ[1] << " ∠:" << posXYZ[2] << "°" << endl;
@@ -641,17 +707,23 @@ void setCommand()
 {
     try {        
         string Command;
-        for (m.lock(); (true) && (toLowers(Command) != "quit"); m.unlock()){
+        for (m.lock(); (true) && (toLowers(Command) != "quit"); m.unlock()) {
             getline(cin, Command);
+            Command = trim(Command);
 
             if (Command == "/") {
                 thread th_keyPress(keyPress);
                 th_keyPress.join();
             }
+            else if (Command == ".") {
+                cout << to_string(socketDict.size()) << endl;
+                checkConnection();
+            }
             else if (!isBlank(Command))
-                ResponeSendCallback(Command); }
+                ResponeSendCallback(socketDict["BaseStation"], Command); }
+        sendCallBack(socketDict["BaseStation"],"quit");
         close(listening);
-        close(clientSocket);
+        close(socketDict["BaseStation"]);
         cout << "# Close App" << endl;
     }
     catch (exception e) {
@@ -664,12 +736,13 @@ int main()
         system("clear");
         printf("~ Welcome to Robot Core ~ \n");
         printf("Use As: "); cin >> useAs;
+        useAs = trim(useAs);
         if ((useAs == "1") ^ (toLowers(useAs) == "r1") ^ (toLowers(useAs) == "robot1")) useAs = "Robot1";
         else if ((useAs == "2") ^ (toLowers(useAs) == "r2") ^ (toLowers(useAs) == "robot2")) useAs = "Robot2";
         else if (((useAs == "3") ^ toLowers(useAs) == "r3") ^ (toLowers(useAs) == "robot3")) useAs = "Robot3";
         else useAs.clear(); }
     getMyIP();
-    setupServer(8686);
+    thread th_setupServer (setupServer, 8686);
     thread th_setCommand(setCommand);
     th_setCommand.join();
     return 0;
