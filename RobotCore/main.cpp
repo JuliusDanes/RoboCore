@@ -628,7 +628,7 @@ int setupServer(int port)
         inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
         bind(listening, (sockaddr*)&hint, sizeof(hint));
 
-        // Tell Winsock the socket is for listening
+        // Tell Winsock the socket is for listening 
         listen(listening, SOMAXCONN); 
         cout  << "Listening to TCP clients at " << getMyIP() << " : " << port << endl;
         listenClient(listening); } 
@@ -709,7 +709,8 @@ void setCommand()
         string Command;
         for (m.lock(); (true) && (toLowers(Command) != "quit"); m.unlock()) {
             getline(cin, Command);
-            Command = trim(Command);
+            if (!isBlank(Command))
+                Command = trim(Command);
 
             if (Command == "/") {
                 thread th_keyPress(keyPress);
