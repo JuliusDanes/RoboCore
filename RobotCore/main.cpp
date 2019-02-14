@@ -494,6 +494,10 @@ string ResponeReceivedCallback(int clientSocket, string message)
             respone = getMyIP();
             goto multicast;
         }
+        else if (toLowers(_dtMessage[0]) == "os")
+        { //Outside
+            text = "Outside";
+        }
         else if (toLowers(_dtMessage[0]) == "get_time")
         { //TIME NOW
             time_t ct = time(0);
@@ -716,7 +720,7 @@ void setCommand()
                 thread th_keyPress(keyPress);
                 th_keyPress.join();
             }
-            else if (Command == ".") {
+            else if (Command == ",") {
                 cout << to_string(socketDict.size()) << endl;
                 checkConnection();
             }
