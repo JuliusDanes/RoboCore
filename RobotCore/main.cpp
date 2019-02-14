@@ -24,7 +24,7 @@
 using namespace std;
 
 string useAs, myIP = "0.0.0.0", ballOn = "";
-bool ball = false;
+bool ball = false, transpose = false;
 int listening, bufSize = 4096;
 int posXYZ[3] = {0, 0, 0};
 map<string, thread> gotoDict;
@@ -642,6 +642,21 @@ int setupServer(int port)
 
 
 
+bool changeTranspose()
+{
+    if (transpose == false) {
+        transpose = true;
+        cout << "Transpose mode ON" << endl; }
+    else {
+        transpose = false;
+        cout << "Transpose mode OFF" << endl; }
+    int _temp = posXYZ[0];      // Swap data X & Y
+    posXYZ[0] = posXYZ[1];
+    posXYZ[1] = _temp;
+    if (socketDict.count("BaseStation"))
+        sendPosXYZ();
+    return transpose;
+}
 
 int kbhit(void)
 {
@@ -667,18 +682,24 @@ void keyEvent(string key)
 {
     int _temp[3];
     copy(begin(posXYZ), (posXYZ), begin(_temp));
-    if (key == "[C")
-        posXYZ[0] += 1;
-    else if (key == "[D")
-        posXYZ[0] -= 1;
-    else if (key == "[A")
-        posXYZ[1] -= 1;
-    else if (key == "[B")
-        posXYZ[1] += 1;
-    else if (key == "[5")
+    int x = 0, y = 1;
+    if (transpose == true) {
+        x = 1; y = 0; }
+
+    if (key == "[C")            //Right
+        posXYZ[x] += 1;
+    else if (key == "[D")       //Left
+        posXYZ[x] -= 1;
+    else if (key == "[A")       //Up
+        posXYZ[y] -= 1;
+    else if (key == "[B")       //Down
+        posXYZ[y] += 1;
+    else if (key == "[5")       //PageUp
         posXYZ[2] += 1;
-    else if (key == "[6")
+    else if (key == "[6")       //PageDown
         posXYZ[2] -= 1;
+    else if (key == ".")        //Dot (.)
+        changeTranspose();
 
     for (int i = 0; i < 3; i++)
         if ((posXYZ[i] != _temp[i]) && socketDict.count("BaseStation") /*&& (_socketDict.ContainsKey("BaseStation"))*/){
@@ -716,11 +737,14 @@ void setCommand()
             if (!isBlank(Command))
                 Command = trim(Command);
 
-            if (Command == "/") {
+            if (Command == "/") {           //Set Location Mode
                 thread th_keyPress(keyPress);
                 th_keyPress.join();
             }
-            else if (Command == ",") {
+            else if (Command == ".") {      //Change Transpose
+                changeTranspose();
+            }
+            else if (Command == ",") {      //Check Connection
                 cout << to_string(socketDict.size()) << endl;
                 checkConnection();
             }
