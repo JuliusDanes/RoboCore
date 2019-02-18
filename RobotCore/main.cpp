@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <fstream>
 
 using namespace std;
 
@@ -34,10 +35,13 @@ thread th_Received, th_setCommand, th_keyPress, th_setupServer, th_chkCon;
 sockaddr_in client;
 mutex m;
 
+string dbData[2][2] = {{ "db1.txt", "0" }, { "db2.txt", "0" }};
+
 inline bool isBlank(const std::string &s)
 {
     return std::all_of(s.cbegin(), s.cend(), [](char c) { return std::isspace(c); });
 }
+
 string trim_left(const string &str)
 {
     const string pattern = " \f\n\r\t\v";
@@ -68,6 +72,26 @@ string keyByValue(map<K, V> m, V value)
     for (auto &i : m)
         if (i.second == value)
             return i.first;
+    return 0;
+}
+
+int kbhit(void)
+{
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    if (ch != EOF) {
+        ungetc(ch, stdin);
+        return 1; }
     return 0;
 }
 
@@ -121,6 +145,92 @@ void checkConnection()
     }
     catch (exception e) {
         cout << "# Check Connection error \n~\n" << e.what() << endl; }
+}
+
+void resetDB(int who)
+{
+    dbData[who][1] = "0";
+    system(("printf '' > " + dbData[who][0]).c_str()); 
+}
+
+void reader1()
+{
+    string s = "";
+    int i = 0;
+    printf("# Read Mode db1 \n\n");
+    while(true) {
+        // system("clear");
+        // printf("# Read Mode db1 \n\n");
+        string line;
+        int _temp = 1;
+        for (ifstream infile(dbData[0][0]); getline(infile, line); _temp++) {  /// Display data
+            if (_temp > stoi(dbData[0][1])) {
+                dbData[0][1] = to_string(_temp);
+                cout << line << endl; } }
+
+        if (kbhit())
+            s += getchar();
+        if ((s.rfind("^") != (s.size() - 1)) && (s.rfind("[") != (s.size() - 1))) {
+            if (s == "") {
+                if (i == 1)
+                    break;
+                i++; }
+            else {
+                i = 0; }
+                
+            s = ""; } 
+        usleep (100000); // time per limit (microsecond)
+    }
+    printf("# Set Command Mode \n");
+}
+
+void reader2()
+{
+    string s = "";
+    int i = 0;
+    printf("# Read Mode db2 \n\n");
+    while(true) {
+        // system("clear");
+        // printf("# Read Mode db2 \n\n");
+        string line;
+        int _temp = 1;
+        for (ifstream infile(dbData[1][0]); getline(infile, line); _temp++) {  /// Display data
+            if (_temp > stoi(dbData[1][1])) {
+                dbData[1][1] = to_string(_temp);
+                cout << line << endl; } }
+
+        if (kbhit())
+            s += getchar();
+        if ((s.rfind("^") != (s.size() - 1)) && (s.rfind("[") != (s.size() - 1))) {
+            if (s == "") {
+                if (i == 1)
+                    break;
+                i++; }
+            else {
+                i = 0; }
+                
+            s = ""; } 
+        usleep (100000); // time per limit (microsecond)
+    }
+    printf("# Set Command Mode \n");
+}
+
+void writer(string _new)
+{
+    string line;
+    int _temp = 0;
+
+    for (ifstream infile(dbData[0][0]); getline(infile, line); _temp++);   /// Get Old Data
+    if (_temp > 10000)
+        resetDB(0);
+
+    std::ofstream file;
+    file.open(dbData[0][0], std::ios::out | std::ios::app);
+    // if (file.fail())
+    //     throw std::ios_base::failure(std::strerror(errno));
+    ///make sure write fails with exception if something is wrong
+    file.exceptions(file.exceptions() | std::ios::failbit | std::ifstream::badbit);
+    file << _new << endl;
 }
 
 void sendCallBack(int clientSocket, string message)
@@ -227,6 +337,29 @@ void threadGoto (string keyName, string message)
     gotoDict[keyName] = thread( GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
 }
 
+void readyReader()
+{
+    while(true) {
+        if (socketDict.count("BaseStation")) 
+        {
+            string line, item;
+            int _temp = 1;
+            for (ifstream infile(dbData[1][0]); getline(infile, line); _temp++) {  /// Send data
+                if (_temp > stoi(dbData[1][1])) {
+                    vector<string> msgXYZ;
+                    dbData[1][1] = to_string(_temp);
+                    // cout << line << endl; 
+                    for (stringstream ss(line); (getline(ss, item, ',')); (msgXYZ.push_back(item)));
+                    // cout << msgXYZ.size();
+                    for (int i = 0; i < msgXYZ.size(); i++)
+                        posXYZ[i] = stoi(msgXYZ[i]);
+                    sendPosXYZ();
+        } } }
+        usleep (50000); // time per limit (microsecond)
+    }
+    printf("# Ready Reader Stop \n");
+}
+
 string ResponeSendCallback(int clientSocket, string message)
 {
     string respone = "", text = "", item;
@@ -311,7 +444,7 @@ end:
 
 string ResponeReceivedCallback(int clientSocket, string message)
 {
-    string respone = "", text = "", item;
+    string respone = "", text = "", write = "", item;
     vector<string> _dtMessage, msgXYZs, msgXYZ;
     for (stringstream ss(message); (getline(ss, item, '|')); (_dtMessage.push_back(item)));
     if ((_dtMessage[0].find("!") == 0) && (_dtMessage[0].size() > 1)) {         // Broadcast message
@@ -345,9 +478,11 @@ string ResponeReceivedCallback(int clientSocket, string message)
         goto end;
     }
     // else if ((_socketDict.ContainsKey("BaseStation")) && (socket.Client.RemoteEndPoint.ToString().Contains(_socketDict["BaseStation"].Client.RemoteEndPoint.ToString())))
+    // else if ((clientSocket != 0) && (socketDict.count("BaseStation")) && (keyByValue(socketDict, clientSocket) == "BaseStation"))
     else if (clientSocket != 0)
     // else if (true)
     {
+        write = message;    //Default write to db1
         // If socket is Base Station socket
         ////    REFEREE BOX COMMANDSt	////
         ///{
@@ -527,6 +662,8 @@ multicast:
 end:
     if (!isBlank(text))
         cout << "# " << text << endl;
+    if (!isBlank(write))
+        writer(write);
    return respone;
 }
 
@@ -658,26 +795,6 @@ bool changeTranspose()
     return transpose;
 }
 
-int kbhit(void)
-{
-    struct termios oldt, newt;
-    int ch;
-    int oldf;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-    ch = getchar();
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-    if (ch != EOF) {
-        ungetc(ch, stdin);
-        return 1; }
-    return 0;
-}
-
 void keyEvent(string key)
 {
     int _temp[3];
@@ -744,6 +861,16 @@ void setCommand()
             else if (Command == ".") {      //Change Transpose
                 changeTranspose();
             }
+            else if (Command == "OP") {      //F1
+                thread th_Read(reader1);
+                th_Read.join(); }
+            else if (Command == "OQ") {      //F2
+                thread th_Read(reader2);
+                th_Read.join(); }
+            else if (Command == ("OR")) {     //F3
+                resetDB(0); }
+            else if (Command == ("OS")) {     //F4
+                resetDB(1); }
             else if (Command == ",") {      //Check Connection
                 cout << to_string(socketDict.size()) << endl;
                 checkConnection();
@@ -772,6 +899,7 @@ int main()
         else useAs.clear(); }
     getMyIP();
     thread th_setupServer (setupServer, 8686);
+    thread th_readyReader(readyReader);
     thread th_setCommand(setCommand);
     th_setCommand.join();
     return 0;
