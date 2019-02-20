@@ -339,22 +339,23 @@ void threadGoto (string keyName, string message)
 
 void readyReader()
 {
+    loop:
+    int nRead = 0;
     while(true) {
-        if (socketDict.count("BaseStation")) 
-        {
+        if (socketDict.count("BaseStation")) {
             string line, item;
             int _temp = 1;
-            for (ifstream infile(dbData[1][0]); getline(infile, line); _temp++) {  /// Send data
-                if (_temp > stoi(dbData[1][1])) {
+            if (nRead > stoi(dbData[1][1]))
+                goto loop;
+            for (ifstream infile(dbData[1][0]); getline(infile, line);  dbData[1][1] = to_string(_temp), _temp++) {  /// Send data            
+                if (_temp > nRead) {
                     vector<string> msgXYZ;
-                    dbData[1][1] = to_string(_temp);
+                    nRead = _temp;
                     // cout << line << endl; 
                     for (stringstream ss(line); (getline(ss, item, ',')); (msgXYZ.push_back(item)));
-                    // cout << msgXYZ.size();
                     for (int i = 0; i < msgXYZ.size(); i++)
                         posXYZ[i] = stoi(msgXYZ[i]);
-                    sendPosXYZ();
-        } } }
+                    sendPosXYZ(); } } }
         usleep (50000); // time per limit (microsecond)
     }
     printf("# Ready Reader Stop \n");
