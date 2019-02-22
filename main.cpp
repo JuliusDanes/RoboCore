@@ -219,69 +219,6 @@ void sendPosXYZ()
         sendCallBack(socketDict["BaseStation"], message); }
 }
 
-void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int shiftY, int shiftAngle)
-{
-    try {
-        cout << "# " << Robot << " : Goto >> " << "X:" << endX << " Y:" << endY << " ∠:" << endAngle << "°" << endl;
-        bool chk[] = { true, true, true };
-        while (chk[0] |= chk[1] |= chk[2]) {
-            if (tempPosXYZ[0] > 12000)
-                tempPosXYZ[0] = stoi (to_string(tempPosXYZ[0]).substr (0, 4));
-            if (tempPosXYZ[1] > 9000)
-                tempPosXYZ[1] = stoi (to_string(tempPosXYZ[1]).substr (0, 4));
-            if (tempPosXYZ[2] > 360)
-                tempPosXYZ[2] = stoi (to_string(tempPosXYZ[2]).substr (0, 2));
-
-            if ((tempPosXYZ[0] > endX) && (shiftX > 0))
-                shiftX *= -1;
-            else if ((tempPosXYZ[0] < endX) && (shiftX < 0))
-                shiftX *= -1;
-            if ((tempPosXYZ[1] > endY) && (shiftY > 0))
-                shiftY *= -1;
-            else if ((tempPosXYZ[1] < endY) && (shiftY < 0))
-                shiftY *= -1;
-            if ((tempPosXYZ[2] > endAngle) && (shiftAngle > 0))
-                shiftAngle *= -1;
-            else if ((tempPosXYZ[2] < endAngle) && (shiftAngle < 0))
-                shiftAngle *= -1;
-
-            if (tempPosXYZ[0] != endX) {
-                if (abs (endX - tempPosXYZ[0]) < abs (shiftX)) // Shift not corresponding
-                    shiftX = (endX - tempPosXYZ[0]);
-                tempPosXYZ[0] += shiftX; // On process
-            } else
-                chk[0] = false; // Done
-            if (tempPosXYZ[1] != endY) {
-                if (abs (endY - tempPosXYZ[1]) < abs (shiftY)) // Shift not corresponding
-                    shiftY = (endY - tempPosXYZ[1]);
-                tempPosXYZ[1] += shiftY; // On process
-            } else
-                chk[1] = false; // Done
-            if (tempPosXYZ[2] != endAngle) {
-                if (abs (endAngle - tempPosXYZ[2]) < abs (shiftAngle)) // Shift not corresponding
-                    shiftAngle = (endAngle - tempPosXYZ[2]);
-                tempPosXYZ[2] += shiftAngle; // On process
-            } else
-                chk[2] = false; // Done
-
-            sendPosXYZ();
-            usleep (100000); // time per limit (microsecond)
-        }
-    } catch (exception e)  {
-        cout << "% Error GotoLoc \n\n" << e.what() << endl; }
-}
-
-void threadGoto (string keyName, string message)
-{
-    string item;
-    vector<int> dtXYZ;
-    if (gotoDict.count(keyName)) {
-        gotoDict[keyName].detach();
-        gotoDict.erase (keyName);
-    }
-    for (stringstream ss(message); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
-    gotoDict[keyName] = thread( GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
-}
 
 void fromArduino()
 {
@@ -308,8 +245,7 @@ void fromArduino()
                 splitI(dataVec1[0], ',', dataVec2);
                 if (PosXYZ != dataVec2) {
                     PosXYZ = dataVec2;
-                    sendPosXYZ(); } }
-        }
+                    sendPosXYZ(); } } }
         // usleep(50000);
     }
 }
@@ -322,6 +258,120 @@ void toArduino(string message)
         else {
             fprintf(connectArduinoW, "%s", (message + "\n").c_str());    //Writing to the Arduino
             printf("@@ Arduino : %s \n", message.c_str()); }
+}
+
+
+// void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int shiftY, int shiftAngle)
+// {
+//     try {
+//         cout << "# " << Robot << " : Goto >> " << "X:" << endX << " Y:" << endY << " ∠:" << endAngle << "°" << endl;
+//         bool chk[] = {true, true, true};
+//         while (chk[0] |= chk[1] |= chk[2]) {
+//             if (PosXYZ[0] > 12000)
+//                 PosXYZ[0] = stoi (to_string(PosXYZ[0]).substr (0, 4));
+//             if (PosXYZ[1] > 9000)
+//                 PosXYZ[1] = stoi (to_string(PosXYZ[1]).substr (0, 4));
+//             if (PosXYZ[2] > 360)
+//                 PosXYZ[2] = stoi (to_string(PosXYZ[2]).substr (0, 2));
+
+//             if ((PosXYZ[0] > endX) && (shiftX > 0))
+//                 shiftX *= -1;
+//             else if ((PosXYZ[0] < endX) && (shiftX < 0))
+//                 shiftX *= -1;
+//             if ((PosXYZ[1] > endY) && (shiftY > 0))
+//                 shiftY *= -1;
+//             else if ((PosXYZ[1] < endY) && (shiftY < 0))
+//                 shiftY *= -1;
+//             if ((PosXYZ[2] > endAngle) && (shiftAngle > 0))
+//                 shiftAngle *= -1;
+//             else if ((PosXYZ[2] < endAngle) && (shiftAngle < 0))
+//                 shiftAngle *= -1;
+
+//             if (PosXYZ[0] != endX) {
+//                 if (abs (endX - PosXYZ[0]) < abs (shiftX)) // Shift not corresponding
+//                     shiftX = (endX - PosXYZ[0]);
+//                 PosXYZ[0] += shiftX; // On process
+//             } else
+//                 chk[0] = false; // Done
+//             if (PosXYZ[1] != endY) {
+//                 if (abs (endY - PosXYZ[1]) < abs (shiftY)) // Shift not corresponding
+//                     shiftY = (endY - PosXYZ[1]);
+//                 PosXYZ[1] += shiftY; // On process
+//             } else
+//                 chk[1] = false; // Done
+//             if (PosXYZ[2] != endAngle) {
+//                 if (abs (endAngle - PosXYZ[2]) < abs (shiftAngle)) // Shift not corresponding
+//                     shiftAngle = (endAngle - PosXYZ[2]);
+//                 PosXYZ[2] += shiftAngle; // On process
+//             } else
+//                 chk[2] = false; // Done
+
+//             sendPosXYZ();
+//             usleep (100000); // time per limit (microsecond)
+//         }
+//     } catch (exception e)  {
+//         cout << "% Error GotoLoc \n\n" << e.what() << endl; }
+// }
+
+void GotoLoc (string Robot, int endX, int endY, int endAngle)
+{
+    try {
+        cout << "# " << Robot << " : Goto >> " << "X:" << endX << " Y:" << endY << " ∠:" << endAngle << "°" << endl;
+        string x = "x", y = "y", z = "z", direction[3];
+        int timeWait = 30000;   // time per limit (microsecond)
+        if (transpose == true)
+            swapS(x, y);
+        bool chk[] = {true, true, true};
+        while (chk[0] |= chk[1] |= chk[2]) {
+            if (PosXYZ[0] > endX)
+                direction[0] = x + "-";
+            else if (PosXYZ[0] < endX)
+                direction[0] = x + "+";
+            if (PosXYZ[1] > endY)
+                direction[1] = y + "-";
+            else if (PosXYZ[1] < endY)
+                direction[1] = y + "+";
+            if (PosXYZ[2] > endAngle)
+                direction[2] = z + "-";
+            else if (PosXYZ[2] < endAngle)
+                direction[2] = z + "+";
+
+            if (PosXYZ[0] != endX) {
+                toArduino(direction[0]); // On process
+                usleep(timeWait);        // time per limit (microsecond)
+            }
+            else
+                chk[0] = false; // Done
+            if (PosXYZ[1] != endY) {
+                toArduino(direction[1]); // On process
+                usleep(timeWait);        // time per limit (microsecond)
+            }
+            else
+                chk[1] = false; // Done
+            if (PosXYZ[2] != endAngle) {
+                toArduino(direction[2]); // On process
+                usleep(timeWait);        // time per limit (microsecond)
+            }
+            else
+                chk[2] = false; // Done
+
+            // usleep (100000); // time per limit (microsecond)
+        }
+    } catch (exception e)  {
+        cout << "% Error GotoLoc \n\n" << e.what() << endl; }
+}
+
+void threadGoto (string keyName, string message)
+{
+    string item;
+    vector<int> dtXYZ;
+    if (gotoDict.count(keyName)) {
+        gotoDict[keyName].detach();
+        gotoDict.erase (keyName);
+    }
+    for (stringstream ss(message); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
+    // gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
+    gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2]);
 }
 
 string ResponeSendCallback(int clientSocket, string message)
@@ -430,9 +480,9 @@ string ResponeReceivedCallback(int clientSocket, string message)
         // for (stringstream ss(msgXYZs.back()); (getline(ss, item, ',')); (msgXYZ.push_back(item)));
 
         // for (int i = 0; i < msgXYZ.size(); i++)
-        //     tempPosXYZ[i] = stoi(msgXYZ[i]);
+        //     PosXYZ[i] = stoi(msgXYZ[i]);
         // sendPosXYZ();
-        // text = "X:" + to_string(tempPosXYZ[0]) + " Y:" + to_string(tempPosXYZ[1]) + " ∠:" + to_string(tempPosXYZ[2]) + "°";
+        // text = "X:" + to_string(PosXYZ[0]) + " Y:" + to_string(PosXYZ[1]) + " ∠:" + to_string(PosXYZ[2]) + "°";
     }
     else if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(go|Go|gO|GO)[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}$")))
     { //Goto Location
@@ -755,9 +805,9 @@ bool changeTranspose()
     else {
         transpose = false;
         cout << "Transpose mode OFF" << endl; }
-    int _temp = tempPosXYZ[0];      // Swap data X & Y
-    tempPosXYZ[0] = tempPosXYZ[1];
-    tempPosXYZ[1] = _temp;
+    int _temp = PosXYZ[0];      // Swap data X & Y
+    PosXYZ[0] = PosXYZ[1];
+    PosXYZ[1] = _temp;
     if (socketDict.count("BaseStation"))
         sendPosXYZ();
     return transpose;
@@ -765,36 +815,35 @@ bool changeTranspose()
 
 // void keyEvent(string key)    ///For Arduino is NOT available
 // {
-//     vector<int> _temp = tempPosXYZ;
+//     vector<int> _temp = PosXYZ;
 //     int x = 0, y = 1;
 //     if (transpose == true) {
 //         x = 1; y = 0; }
 
 //     if (key == "[C")            //Right
-//         tempPosXYZ[x] += 1;
+//         PosXYZ[x] += 1;
 //     else if (key == "[D")       //Left
-//         tempPosXYZ[x] -= 1;
+//         PosXYZ[x] -= 1;
 //     else if (key == "[A")       //Up
-//         tempPosXYZ[y] -= 1;
+//         PosXYZ[y] -= 1;
 //     else if (key == "[B")       //Down
-//         tempPosXYZ[y] += 1;
+//         PosXYZ[y] += 1;
 //     else if (key == "[5")       //PageUp
-//         tempPosXYZ[2] += 1;
+//         PosXYZ[2] += 1;
 //     else if (key == "[6")       //PageDown
-//         tempPosXYZ[2] -= 1;
+//         PosXYZ[2] -= 1;
 //     else if (key == ".")        //Dot (.)
 //         changeTranspose();
 
 //     for (int i = 0; i < 3; i++)
-//         if ((tempPosXYZ[i] != _temp[i]) && socketDict.count("BaseStation") /*&& (_socketDict.ContainsKey("BaseStation"))*/){
+//         if ((PosXYZ[i] != _temp[i]) && socketDict.count("BaseStation") /*&& (_socketDict.ContainsKey("BaseStation"))*/){
 //             sendPosXYZ();
 //             break; }
-//     // cout << "# X:" << tempPosXYZ[0] << " Y:" << tempPosXYZ[1] << " ∠:" << tempPosXYZ[2] << "°" << endl;
+//     // cout << "# X:" << PosXYZ[0] << " Y:" << PosXYZ[1] << " ∠:" << PosXYZ[2] << "°" << endl;
 // }
 
 void keyEvent(string key)   ///For Arduino is available
 {
-    vector<int> _temp = tempPosXYZ;
     string x = "x", y = "y", z = "z";
     if (transpose == true)
         swapS(x, y);
@@ -813,7 +862,7 @@ void keyEvent(string key)   ///For Arduino is available
         toArduino(z+"-");
     else if (key == ".")        //Dot (.)
         changeTranspose();
-    // cout << "# X:" << tempPosXYZ[0] << " Y:" << tempPosXYZ[1] << " ∠:" << tempPosXYZ[2] << "°" << endl;
+    // cout << "# X:" << PosXYZ[0] << " Y:" << PosXYZ[1] << " ∠:" << PosXYZ[2] << "°" << endl;
 }
 
 void keyPress()
