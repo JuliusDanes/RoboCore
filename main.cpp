@@ -298,7 +298,7 @@ void toArduino(string message)
 //                     shiftY = (endY - PosXYZ[1]);
 //                 PosXYZ[1] += shiftY; // On process
 //             } else
-//                 chk[1] = false; // Done
+//                 chk[1] = false; // DonekeyName
 //             if (PosXYZ[2] != endAngle) {
 //                 if (abs (endAngle - PosXYZ[2]) < abs (shiftAngle)) // Shift not corresponding
 //                     shiftAngle = (endAngle - PosXYZ[2]);
@@ -322,7 +322,8 @@ void GotoLoc (string Robot, int endX, int endY, int endAngle)
         if (transpose == true)
             swapS(x, y);
         bool chk[] = {true, true, true};
-        while (chk[0] |= chk[1] |= chk[2]) {
+        while ((gotoDict.count(Robot)) && (chk[0] |= chk[1] |= chk[2])) {
+
             if (PosXYZ[0] > endX)
                 direction[0] = x + "-";
             else if (PosXYZ[0] < endX)
@@ -361,15 +362,22 @@ void GotoLoc (string Robot, int endX, int endY, int endAngle)
         cout << "% Error GotoLoc \n\n" << e.what() << endl; }
 }
 
+bool stopThread(map<string, thread> &threadMap, string keyName)
+{
+    if (threadMap.count(keyName)) {
+        threadMap[keyName].detach();
+        threadMap.erase(keyName);
+        printf("# Thread Goto is STOPPED :<\n");
+        return 1; }
+    return 0;
+}
+
 void threadGoto (string keyName, string message)
 {
     string item;
     vector<int> dtXYZ;
-    if (gotoDict.count(keyName)) {
-        gotoDict[keyName].detach();
-        gotoDict.erase (keyName);
-    }
-    for (stringstream ss(message); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item))));
+    // stopThread(gotoDict, keyName);  //Turn it off if threre is still something running
+    for (stringstream ss(message); (getline(ss, item, ',')); (dtXYZ.push_back(stoi(item)))) ;
     // gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);
     gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2]);
 }
@@ -424,6 +432,12 @@ string ResponeSendCallback(int clientSocket, string message)
             ball = false;
             respone = "b_";
             goto broadcast;
+        }
+
+        /// COMMAND ///
+        else if (_dtMessage[0] == "~")  ///Tilde character
+        { //Force stop sthread
+            stopThread(gotoDict, useAs);  ///Turn it off if threre is still something running
         }
 
         /// OTHERS ///
@@ -625,6 +639,10 @@ string ResponeReceivedCallback(int clientSocket, string message)
         else if (regex_match(_dtMessage[0].begin(), _dtMessage[0].end(), regex("^(x[+]|x-|y[+]|y-|z[+]|z-)$")))
         { //Go by Arrow
             toArduino(_dtMessage[0]);
+        }
+        else if (_dtMessage[0] == "~")  ///Tilde character
+        { //Force stop sthread
+            stopThread(gotoDict, useAs);  ///Turn it off if threre is still something running
         }
 
         /// OTHERS ///
