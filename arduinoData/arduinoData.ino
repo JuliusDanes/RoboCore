@@ -1,5 +1,5 @@
 String data = "";
-int PosXYZ[3] = {0, 0, 0}, tempPosXYZ[3] = {0, 0, 0}, shift[3] = {1, 1, 1};
+int PosXYZ[3] = {0, 0, 0}, tempPosXYZ[3] = {-1, -1, -1}, shift[3] = {1, 1, 1};
 
 void setup() {
   Serial.begin(9600);
