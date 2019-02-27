@@ -24,7 +24,7 @@
 
 using namespace std;
 
-string useAs, myIP = "0.0.0.0", ballOn = "", serialPort = "/dev/ttyUSB0";
+string useAs, myIP = "0.0.0.0", ballOn = "", serialPort;
 bool ball = false, transpose = false, processing = false;
 int listening, bufSize = 4096;
 vector <int> PosXYZ {0, 0, 0}, tempPosXYZ {0, 0, 0}, shift {1, 1, 1};
@@ -32,7 +32,7 @@ map<string, thread> gotoDict, th_Receiveds;
 map<string, int> socketDict;
 sockaddr_in client;
 mutex m;
-FILE* connectArduinoW = fopen(serialPort.c_str(), "w"); //Opening device file;
+FILE *connectArduinoW;
 
 inline bool isBlank(const string &s)
 {
@@ -86,13 +86,13 @@ void swap(int &a, int &b)
     b = _temp;
 }
 
-void splitS(string &text, char delimiter, vector<string> &vec)
+void split(string &text, char delimiter, vector<string> &vec)
 {
     string item;
     for (stringstream ss(text); getline(ss, item, delimiter); (vec.push_back(item)));
 }
 
-void splitI(string &text, char delimiter, vector<int> &vec)
+void split(string &text, char delimiter, vector<int> &vec)
 {
     string item;
     for (stringstream ss(text); getline(ss, item, delimiter); (vec.push_back(stoi(item))));
@@ -110,8 +110,7 @@ string keyByValue(map<K, V> m, V value)
 int kbhit(void)
 {
     struct termios oldt, newt;
-    int ch;
-    int oldf;
+    int ch, oldf;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
@@ -160,6 +159,16 @@ string getMyIP(){
     return myIP;
 }
 
+int connectArduino()
+{
+    for (int i = 0; (connectArduinoW == NULL) && (i < 30); i++)
+        connectArduinoW = fopen((serialPort = "/dev/ttyUSB" + to_string(i)).c_str(), "wr"); //Opening device file;
+    if (connectArduinoW != NULL)
+        printf("[OK]  %s \n", serialPort.c_str());
+    else
+        printf("[X]  ERROR_CONNECT_ARDUINO \n");
+}
+
 void checkConnection()
 {
     try {
@@ -185,8 +194,7 @@ void sendCallBack(int clientSocket, string message)
         if ((!isBlank(trim(message))) /*&& (toLowers(message) != "quit")*/) {
             char buf[bufSize];
 
-            if (clientSocket != 0)
-            {
+            if (clientSocket != 0) {
                 //	Send to server
                 int sendRes = send(clientSocket, trim(message).c_str(), message.size() + 1, 0);
                 if (sendRes == -1) {
@@ -194,11 +202,10 @@ void sendCallBack(int clientSocket, string message)
                     clientSocket = 0;
                     return; }
                 else
-                    cout << "@ " << keyByValue(socketDict, clientSocket) << " : " << trim(message) << endl;
-            }
+                    if (message != ".")
+                        cout << "@ " << keyByValue(socketDict, clientSocket) << " : " << trim(message) << endl; }
             else
-                printf("!...Not Connected...! \n"); }
-    }
+                printf("!...Not Connected...! \n"); } }
     catch (exception e) {
         cout << "# Send Callback error \n~\n" << e.what() << endl; }
 }
@@ -214,7 +221,7 @@ void toArduino(string message)
 {
     if (!isBlank(message))
         if (connectArduinoW == NULL)
-            printf("ERROR_CONNECT_ARDUINO \n");
+            connectArduino();
         else {
             fprintf(connectArduinoW, "%s", (message + "\n").c_str());    //Writing to the Arduino
             printf("@@ Arduino : %s \n", message.c_str()); }
@@ -334,7 +341,7 @@ void threadGoto (string keyName, string message)
 {
     vector<int> dtXYZ;
     stopThread(gotoDict, keyName);  ///Turn it off if threre is still something running
-    splitI(message, ',', dtXYZ);
+    split(message, ',', dtXYZ);
     while(processing);
     // gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2], 20, 20, 1);     ///For NOT connected Arduino
     gotoDict[keyName] = thread(GotoLoc, useAs, dtXYZ[0], dtXYZ[1], dtXYZ[2]);       ///For connected Arduino
@@ -344,7 +351,7 @@ string ResponeSendCallback(int clientSocket, string message)
 {
     string respone = "", text = "";
     vector<string> _dtMessage;
-    splitS(message, '|', _dtMessage);
+    split(message, '|', _dtMessage);
 
     if ((_dtMessage[0].find("!") == 0) && (_dtMessage[0].size() > 1)) {
         _dtMessage.clear();
@@ -432,7 +439,7 @@ string ResponeReceivedCallback(int clientSocket, string message)
 {
     string respone = "", text = "";
     vector<string> _dtMessage, msgXYZs, msgXYZ;
-    splitS(message, '|', _dtMessage);
+    split(message, '|', _dtMessage);
     if ((_dtMessage[0].find("!") == 0) && (_dtMessage[0].size() > 1)) {         // Broadcast message
         _dtMessage.clear();
         _dtMessage.push_back(_dtMessage[0].substr(1)); _dtMessage.push_back("Robot1,Robot2,Robot3"); }
@@ -448,8 +455,8 @@ string ResponeReceivedCallback(int clientSocket, string message)
         // If message is data X, Y, Z
         toArduino(_dtMessage[0]);
 
-        // splitS(_dtMessage[0], 'E', msgXYZs);
-        // splitS(msgXYZs.back(), ',', msgXYZ);
+        // split(_dtMessage[0], 'E', msgXYZs);
+        // split(msgXYZs.back(), ',', msgXYZ);
         // for (int i = 0; i < msgXYZ.size(); i++)
         //     PosXYZ[i] = stoi(msgXYZ[i]);
         // sendPosXYZ();
@@ -665,8 +672,7 @@ void receivedCallBack(int clientSocket)
     try {
         string message = "";
         // for (m.lock(); (true) && (toLowers(message) != "quit"); message.clear(), m.unlock())
-        while ((true) && (toLowers(message) != "quit"))
-        {
+        while ((true) && (toLowers(message) != "quit")) {
             /// While loop: accept and echo message back to client user Input
             char buf[bufSize];
             memset(buf, 0, bufSize);
@@ -675,19 +681,20 @@ void receivedCallBack(int clientSocket)
             if (bytesReceived == -1) {
                 sendCallBack(clientSocket, "quit");
                 cerr << "Error in receivedCallBack(). Quitting" << endl;
-                break;
-                }
+                break; }
 
             if ((bytesReceived == 0) || (clientSocket == 0)) {
                 sendCallBack(clientSocket, "quit");
                 cout << "Client disconnected " << endl;
-                break;
-                }
+                break; }
             message = trim(string(buf, 0, bytesReceived));
-            if (!isBlank(message)) {
-                cout << "> " << keyByValue(socketDict, clientSocket) << " : " << message << endl;
-                ResponeReceivedCallback(clientSocket, message);
-                }
+
+            if (!isBlank(message)  && (message.find(".") == 0))     //time Relay
+                sendCallBack(clientSocket, ".");
+            else if (!isBlank(message)) {
+                if (message != ".")
+                    cout << "> " << keyByValue(socketDict, clientSocket) << " : " << message << endl;
+                ResponeReceivedCallback(clientSocket, message); }
 
             /// Echo message back to client
             // send(clientSocket, buf, bytesReceived + 1, 0);
@@ -700,10 +707,43 @@ void receivedCallBack(int clientSocket)
         cout << "# Received error \n~\n" << e.what() << endl; }
 }
 
+void fromArduino()
+{
+    char buffer[1024];
+    int numBytesRead;
+    FILE *connectArduinoR = fopen(serialPort.c_str(), "r");
+
+    if (connectArduinoR == NULL) {
+        printf("ERROR_CONNECT_ARDUINO \n");
+        return; }
+
+    // for (m.lock(); true; m.unlock())
+    while ((true) && (connectArduinoR != NULL)) {
+        memset(buffer, 0, 1024);
+        fread(buffer, sizeof(char), 1024, connectArduinoR);
+        string message = string(buffer);
+        if (!isBlank(message)) {
+            message = trim(message);
+            if (regex_match(message.begin(), message.end(), regex("^[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}E$"))) {
+                ///Data is location X, Y, Z Encoder
+                vector<string> dataVec1;
+                vector<int> dataVec2;
+                split(message, 'E', dataVec1);
+                split(dataVec1[0], ',', dataVec2);
+                if (PosXYZ != dataVec2) {
+                    PosXYZ = dataVec2;
+                    sendPosXYZ(); } }
+            // else
+            //     if (socketDict.count("BaseStation"))
+            //         ResponeSendCallback(socketDict["BaseStation"], message);
+        }
+        // usleep(50000);
+    }
+}
+
 void listenClient(int listening)
 {
-    try
-    {
+    try {
         for (m.lock(); true; m.unlock())
         // while (true)
         {
@@ -736,48 +776,10 @@ void listenClient(int listening)
             th_Receiveds[IPAdd+":"+to_string(clientSocket)] = thread(receivedCallBack, clientSocket);
             sendCallBack(clientSocket, useAs);
             sendPosXYZ();
-            checkConnection();
-        }
-    }
+            checkConnection(); } }
     catch (exception e) {
         cout << "# Listening error \n~swap\n"
-             << e.what() << endl;
-    }
-}
-
-void fromArduino()
-{
-    char buffer[1024];
-    int numBytesRead;
-    FILE *connectArduinoR = fopen(serialPort.c_str(), "r");
-
-    if (connectArduinoR == NULL) {
-        printf("ERROR_CONNECT_ARDUINO \n");
-        return; }
-
-    // for (m.lock(); true; m.unlock())
-    while ((true) && (connectArduinoR != NULL))
-    {
-        memset(buffer, 0, 1024);
-        fread(buffer, sizeof(char), 1024, connectArduinoR);
-        string message = string(buffer);
-        if (!isBlank(message)) {
-            message = trim(message);
-            if (regex_match(message.begin(), message.end(), regex("^[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}E$"))) {
-                ///Data is location X, Y, Z Encoder
-                vector<string> dataVec1;
-                vector<int> dataVec2;
-                splitS(message, 'E', dataVec1);
-                splitI(dataVec1[0], ',', dataVec2);
-                if (PosXYZ != dataVec2) {
-                    PosXYZ = dataVec2;
-                    sendPosXYZ(); } }
-            // else
-            //     if (socketDict.count("BaseStation"))
-            //         ResponeSendCallback(socketDict["BaseStation"], message);
-        }
-        // usleep(50000);
-    }
+             << e.what() << endl; }
 }
 
 int setupServer(int port)
@@ -804,8 +806,6 @@ int setupServer(int port)
     catch (exception e) {
         cout << "# Setup Server error \n~\n" << e.what() << endl; }
 }
-
-
 
 bool changeTranspose()
 {
@@ -936,7 +936,8 @@ int main()
         else if (((useAs == "3") ^ toLowers(useAs) == "r3") ^ (toLowers(useAs) == "robot3")) useAs = "Robot3";
         else useAs.clear(); }
     getMyIP();
-    thread th_setupServer (setupServer, 8686);
+    connectArduino();
+    thread th_setupServer(setupServer, 8686);
     thread th_fromArduino (fromArduino);
     thread th_setCommand (setCommand);
     th_setCommand.join();
