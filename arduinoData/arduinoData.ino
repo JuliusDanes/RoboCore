@@ -58,6 +58,6 @@ void send()
 void loop() {
   receive();
   send();  
-//  delay(50);
+  delay(50);
 }
 

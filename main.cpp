@@ -26,8 +26,8 @@ using namespace std;
 
 string useAs, myIP = "0.0.0.0", ballOn = "", serialPort;
 bool ball = false, transpose = false, processing = false;
-int listening, bufSize = 4096;
-vector <int> PosXYZ {0, 0, 0}, tempPosXYZ {0, 0, 0}, shift {1, 1, 1};
+int listening, bufSize = 4096, stat=0;
+vector <int> PosXYZ {0, 0, 0}, tempPosXYZ {0, 0, 0}, shift {15, 15, 15};
 map<string, thread> gotoDict, th_Receiveds;
 map<string, int> socketDict;
 sockaddr_in client;
@@ -161,8 +161,9 @@ string getMyIP(){
 
 int connectArduino()
 {
-    for (int i = 0; (connectArduinoW == NULL) && (i < 30); i++)
-        connectArduinoW = fopen((serialPort = "/dev/ttyUSB" + to_string(i)).c_str(), "wr"); //Opening device file;
+    for (int i = 0; (connectArduinoW == NULL) && (i < 50); i++)
+       connectArduinoW = fopen((serialPort = "/dev/ttyUSB" + to_string(i)).c_str(), "wr"); //Opening device file;
+        // connectArduinoW = fopen((serialPort = "/dev/ttyUSB0").c_str(), "wr"); //Opening device file;
     if (connectArduinoW != NULL)
         printf("[OK]  %s \n", serialPort.c_str());
     else
@@ -222,9 +223,41 @@ void toArduino(string message)
     if (!isBlank(message))
         if (connectArduinoW == NULL)
             connectArduino();
-        else {
-            fprintf(connectArduinoW, "%s", (message + "\n").c_str());    //Writing to the Arduino
-            printf("@@ Arduino : %s \n", message.c_str()); }
+        else 
+        {
+        // 	if((message == "x+") && (PosXYZ[0]) == tempPosXYZ[0]){
+        //  		message = "r";
+    			 // tempPosXYZ[0] += shift[0];
+        //  	}
+        // 	else if((message == "x-") && (PosXYZ[0]) == tempPosXYZ[0]){
+        //  		message = "l";
+    			 // tempPosXYZ[0] -= shift[0];
+        //  	}
+        //  	else if((message == "y+") && (PosXYZ[1]) == tempPosXYZ[1]){
+        //  		message = "u";
+    			 // tempPosXYZ[1] += shift[1];
+        //  	}
+        //  	else if((message == "y-") && (PosXYZ[1]) == tempPosXYZ[1]){
+        //  		message = "d";
+    			 // tempPosXYZ[1] -= shift[1];
+        //  	}
+        //  	else if((message == "z+") && (PosXYZ[2]) == tempPosXYZ[2]){
+        //  		message = "x";
+    			 // tempPosXYZ[2] += shift[2];
+        //  	}
+        //  	else if((message == "z-") && (PosXYZ[2]) == tempPosXYZ[2]){
+        //  		message = "z";
+    			 // tempPosXYZ[2] -= shift[2];
+        //  	}
+             //else
+                 //return;
+            if(stat==0)
+            {
+                stat=1;
+                fprintf(connectArduinoW, "%s", (message + "\n").c_str());    //Writing to the Arduino
+                printf("@@ Arduino : %s \n", message.c_str()); 
+            }
+        }
 }
 
 // void GotoLoc (string Robot, int endX, int endY, int endAngle, int shiftX, int shiftY, int shiftAngle)
@@ -480,9 +513,11 @@ string ResponeReceivedCallback(int clientSocket, string message)
         ///{
         /// 1. DEFAULT COMMANDS ///
             if (_dtMessage[0] == "S") { //STOP
-                text = "STOP"; }
+                text = "STOP";
+                toArduino(_dtMessage[0]); }
             else if (_dtMessage[0] == "s") { //START
-                text = "START"; }
+                text = "START";
+                toArduino(_dtMessage[0]); }
             else if (_dtMessage[0] == "W") { //WELCOME (welcome message)
                 text = "WELCOME"; }
             else if (_dtMessage[0] == "Z") { //RESET (Reset Game)
@@ -710,7 +745,6 @@ void receivedCallBack(int clientSocket)
 void fromArduino()
 {
     char buffer[1024];
-    int numBytesRead;
     FILE *connectArduinoR = fopen(serialPort.c_str(), "r");
 
     if (connectArduinoR == NULL) {
@@ -724,6 +758,9 @@ void fromArduino()
         string message = string(buffer);
         if (!isBlank(message)) {
             message = trim(message);
+            cout << message << endl;    // Print All Message, No Filter
+            stat=0;
+
             if (regex_match(message.begin(), message.end(), regex("^[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}E$"))) {
                 ///Data is location X, Y, Z Encoder
                 vector<string> dataVec1;
@@ -733,6 +770,7 @@ void fromArduino()
                 if (PosXYZ != dataVec2) {
                     PosXYZ = dataVec2;
                     sendPosXYZ(); } }
+
             // else
             //     if (socketDict.count("BaseStation"))
             //         ResponeSendCallback(socketDict["BaseStation"], message);
