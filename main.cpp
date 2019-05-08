@@ -24,7 +24,7 @@
 
 using namespace std;
 
-string useAs, myIP = "0.0.0.0", ballOn = "", serialPort;
+string useAs, myIP = "0.0.0.0", ballOn = "", serialPort, serialPortCustom;
 bool ball = false, transpose = false, processing = false;
 int listening, bufSize = 4096, stat=0;
 vector <int> PosXYZ {0, 0, 0}, tempPosXYZ {0, 0, 0}, shift {15, 15, 15};
@@ -161,13 +161,27 @@ string getMyIP(){
 
 int connectArduino()
 {
-    for (int i = 0; (connectArduinoW == NULL) && (i < 50); i++)
-       connectArduinoW = fopen((serialPort = "/dev/ttyUSB" + to_string(i)).c_str(), "wr"); //Opening device file;
-        // connectArduinoW = fopen((serialPort = "/dev/ttyUSB0").c_str(), "wr"); //Opening device file;
+    // for (int i = 0; (connectArduinoW == NULL) && (i < 50); i++)
+    //    connectArduinoW = fopen((serialPort = "/dev/ttyUSB" + to_string(i)).c_str(), "wr"); //Opening device file;
+    // for (int i = 0; (connectArduinoW == NULL) && (i < 50); i++)
+    //    connectArduinoW = fopen((serialPort = "/dev/ttyACM" + to_string(i)).c_str(), "wr"); //Opening device file;
+
+    connectArduinoW = fopen((serialPort = "/dev/tty"+ serialPortCustom).c_str(), "wr"); //Opening device file;
+
     if (connectArduinoW != NULL)
         printf("[OK]  %s \n", serialPort.c_str());
     else
-        printf("[X]  ERROR_CONNECT_ARDUINO \n");
+        printf("[X]  ERROR_CONNECT_ARDUINO ON %s \n", serialPort.c_str());
+}
+
+void setSerialport()
+{
+    printf("Serial Port: /dev/tty"); cin >> serialPortCustom;
+    serialPortCustom = trim(serialPortCustom);
+    if (regex_match(serialPortCustom.begin(), serialPortCustom.end(), regex("^(USB|usb|U|u)[0-9]{1,3}$"))) serialPortCustom = "USB" + string(1, serialPortCustom[serialPortCustom.size()-1]); 
+    else if (regex_match(serialPortCustom.begin(), serialPortCustom.end(), regex("^(ACM|acm|A|a)[0-9]{1,3}$"))) serialPortCustom = "ACM" + string(1, serialPortCustom[serialPortCustom.size()-1]); 
+    else serialPortCustom.clear(); 
+    connectArduino();
 }
 
 void checkConnection()
@@ -670,6 +684,10 @@ string ResponeReceivedCallback(int clientSocket, string message)
         { //Outside
             text = "Outside";
         }
+        else if (toLowers(_dtMessage[0]) == "F10")
+        { //  Stat Comunication Arduino
+            stat = 0;
+        }
         else if (toLowers(_dtMessage[0]) == "get_time")
         { //TIME NOW
             time_t ct = time(0);
@@ -742,13 +760,22 @@ void receivedCallBack(int clientSocket)
         cout << "# Received error \n~\n" << e.what() << endl; }
 }
 
+void startAgain()
+{
+	cout << "wait_start_again" << endl;
+	usleep(1000000);	//Delay 1 seconds
+	toArduino("s");
+	toArduino("s");
+	sendCallBack(socketDict["BaseStation"], "start_again");
+}
+
 void fromArduino()
 {
     char buffer[1024];
-    FILE *connectArduinoR = fopen(serialPort.c_str(), "r");
+    FILE *connectArduinoR = fopen((serialPort = "/dev/tty"+ serialPortCustom).c_str(), "r");
 
     if (connectArduinoR == NULL) {
-        printf("ERROR_CONNECT_ARDUINO \n");
+        printf("[X]  ERROR_CONNECT_ARDUINO ON %s \n", serialPort.c_str());
         return; }
 
     // for (m.lock(); true; m.unlock())
@@ -761,15 +788,22 @@ void fromArduino()
             cout << message << endl;    // Print All Message, No Filter
             stat=0;
 
-            if (regex_match(message.begin(), message.end(), regex("^[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}E$"))) {
-                ///Data is location X, Y, Z Encoder
-                vector<string> dataVec1;
-                vector<int> dataVec2;
-                split(message, 'E', dataVec1);
-                split(dataVec1[0], ',', dataVec2);
-                if (PosXYZ != dataVec2) {
-                    PosXYZ = dataVec2;
-                    sendPosXYZ(); } }
+            if(message.find("s") <= message.size())
+            {
+            	cout << "get_s" << endl;
+            	startAgain();
+    			// thread th_startAgain (startAgain);            	
+            }
+
+            // if (regex_match(message.begin(), message.end(), regex("^[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5},[-]{0,1}[0-9]{1,5}E$"))) {
+            //     ///Data is location X, Y, Z Encoder
+            //     vector<string> dataVec1;
+            //     vector<int> dataVec2;
+            //     split(message, 'E', dataVec1);
+            //     split(dataVec1[0], ',', dataVec2);
+            //     if (PosXYZ != dataVec2) {
+            //         PosXYZ = dataVec2;
+            //         sendPosXYZ(); } }
 
             // else
             //     if (socketDict.count("BaseStation"))
@@ -790,31 +824,42 @@ void listenClient(int listening)
             int clientSocket = accept(listening, (sockaddr*)&client, &clientSize);
 
             char host[NI_MAXHOST];      // Client's remote name
-            char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
+            // char service[NI_MAXSERV];   // Service (i.e. port) the client is connect on
 
             memset(host, 0, NI_MAXHOST); // same as memset(host, 0, NI_MAXHOST);
-            memset(service, 0, NI_MAXSERV);
+            // memset(service, 0, NI_MAXSERV);
 
             string IPAdd = inet_ntoa(client.sin_addr);
-            // printf("IP address is: %s\n", inet_ntoa(client.sin_addr));
-            // printf("port is: %d\n", (int) ntohs(client.sin_port));
+            // // printf("IP address is: %s\n", inet_ntoa(client.sin_addr));
+            // // printf("port is: %d\n", (int) ntohs(client.sin_port));
 
-            if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
-                cout << "C" << clientSocket << " >> " << host << " connected on port " << service << endl; }
-            else {
-                inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
-                cout << "C" << clientSocket << " >> "  << host << " connected on port " << ntohs(client.sin_port) << endl; }
+            // if (getnameinfo((sockaddr*)&client, sizeof(client), host, NI_MAXHOST, service, NI_MAXSERV, 0) == 0) {
+            //     cout << "C" << clientSocket << " >> " << host << " connected on port " << service << endl; }
+            // else {
+            //     inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
+            //     cout << "C" << clientSocket << " >> "  << host << " connected on port " << ntohs(client.sin_port) << endl; }
+            
+            inet_ntop(AF_INET, &client.sin_addr, host, NI_MAXHOST);
+            cout << "C" << clientSocket << " >> "  << host << " connected on port " << ntohs(client.sin_port) << endl;
 
-            socketDict[IPAdd+":"+to_string(clientSocket)] = clientSocket;
+
+            // socketDict[IPAdd+":"+to_string(clientSocket)] = clientSocket;
+            socketDict["BaseStation"] = clientSocket;
+            for (auto &i : socketDict)
+                if (i.first != "BaseStation") {
+                    // close(i.second);
+                    socketDict[i.first] = 0; }
 
             /// Close listening socket
             // close(listening);
 
             /// Start received message
-            th_Receiveds[IPAdd+":"+to_string(clientSocket)] = thread(receivedCallBack, clientSocket);
-            sendCallBack(clientSocket, useAs);
-            sendPosXYZ();
-            checkConnection(); } }
+            // th_Receiveds[IPAdd+":"+to_string(clientSocket)] = thread(receivedCallBack, clientSocket);
+            th_Receiveds["BaseStation"] = thread(receivedCallBack, clientSocket);
+            // sendCallBack(clientSocket, useAs);
+            // sendPosXYZ();
+            checkConnection(); 
+        } }
     catch (exception e) {
         cout << "# Listening error \n~swap\n"
              << e.what() << endl; }
@@ -878,8 +923,10 @@ bool changeTranspose()
 //         PosXYZ[2] += 1;
 //     else if (key == "[6")       //PageDown
 //         PosXYZ[2] -= 1;
-//     else if (key == ".")        //Dot (.)
-//         changeTranspose();
+//    else if (key == ".")        //Dot (.)
+//        setSerialport();
+//    else if (key == ":")        //Double Dot (:)
+//        changeTranspose();
 
 //     for (int i = 0; i < 3; i++)
 //         if ((PosXYZ[i] != _temp[i]) && socketDict.count("BaseStation") /*&& (_socketDict.ContainsKey("BaseStation"))*/){
@@ -907,6 +954,8 @@ void keyEvent(string key)   ///For Arduino is available
     else if (key == "[6")       //PageDown
         toArduino(z+"-");
     else if (key == ".")        //Dot (.)
+        setSerialport();
+    else if (key == ":")        //Double Dot (:)
         changeTranspose();
     // cout << "# X:" << PosXYZ[0] << " Y:" << PosXYZ[1] << " ∠:" << PosXYZ[2] << "°" << endl;
 }
@@ -944,12 +993,15 @@ void setCommand()
                 thread th_keyPress(keyPress);
                 th_keyPress.join();
             }
-            else if (Command == ".") {      //Change Transpose
-                changeTranspose();
+            else if (Command == ".") {      //Set Serial Port
+                setSerialport();
             }
             else if (Command == ",") {      //Check Connection
                 cout << to_string(socketDict.size()) << endl;
                 checkConnection();
+            }
+            else if (Command == ":") {      //Change Transpose
+                changeTranspose();
             }
             else if (!isBlank(Command))
                 ResponeSendCallback(socketDict["BaseStation"], Command); }
@@ -962,19 +1014,30 @@ void setCommand()
         cout << "% setCommand error \n~\n" << e.what() << endl; }
 }
 
-int main()
+void autoReconnect()
 {
-    for (m.lock(); isBlank(useAs); m.unlock()){
-        system("clear");
-        printf("~ Welcome to Robot Core ~ \n");
-        printf("Use as Robot: "); cin >> useAs;
-        useAs = trim(useAs);
-        if ((useAs == "1") ^ (toLowers(useAs) == "r1") ^ (toLowers(useAs) == "robot1")) useAs = "Robot1";
-        else if ((useAs == "2") ^ (toLowers(useAs) == "r2") ^ (toLowers(useAs) == "robot2")) useAs = "Robot2";
-        else if (((useAs == "3") ^ toLowers(useAs) == "r3") ^ (toLowers(useAs) == "robot3")) useAs = "Robot3";
-        else useAs.clear(); }
+	for (int ar=0; ; ar++)
+	{
+		system("ar > backup_connect.txt");
+		usleep(100000);
+	}
+}
+
+int main()
+{	
+    // for (m.lock(); isBlank(useAs); m.unlock()){
+    //     system("clear");
+    //     printf("~ Welcome to Robot Core ~ \n");
+    //     printf("Use as Robot: "); cin >> useAs;
+    //     useAs = trim(useAs);
+    //     if ((useAs == "1") ^ (toLowers(useAs) == "r1") ^ (toLowers(useAs) == "robot1")) useAs = "Robot1";
+    //     else if ((useAs == "2") ^ (toLowers(useAs) == "r2") ^ (toLowers(useAs) == "robot2")) useAs = "Robot2";
+    //     else if (((useAs == "3") ^ toLowers(useAs) == "r3") ^ (toLowers(useAs) == "robot3")) useAs = "Robot3";
+    //     else useAs.clear(); }
+    for (m.lock(); isBlank(serialPortCustom); m.unlock()){
+    	system("clear");
+    	setSerialport(); }
     getMyIP();
-    connectArduino();
     thread th_setupServer(setupServer, 8686);
     thread th_fromArduino (fromArduino);
     thread th_setCommand (setCommand);
